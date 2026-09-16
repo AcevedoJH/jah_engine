@@ -1,0 +1,104 @@
+/**
+ * ============================================================
+ * JAH ENGINE - src/index.css (estilos globales + tokens de tema)
+ * ============================================================
+ * Este es el UNICO CSS global del proyecto. Aqui ocurren dos cosas:
+ *
+ * 1. DIRECTIVAS DE TAILWIND:
+ *    - @tailwind base         -> reset/normalizacion (preflight).
+ *    - @tailwind components   -> clases de componentes (pocas).
+ *    - @tailwind utilities    -> TODAS las utilidades (p-4, flex...).
+ *    Tailwind las expande al compilar segun tailwind.config.js.
+ *
+ * 2. VARIABLES CSS DE SHADCN ("design tokens"):
+ *    En lugar de colores fijos, definimos variables HSL. Tailwind las
+ *    consume via `hsl(var(--primary))` (ver tailwind.config.js). Al
+ *    cambiar `.dark`, TODA la app cambia de tema sin recompilar CSS.
+ *    El formato es "H S% L%" (solo valores, sin la funcion hsl()),
+ *    para poder combinarlas con opacidad: hsl(var(--primary) / 0.5).
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ---------- Tema CLARO (valores por defecto) ---------- */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Color primario del engine (índigo). */
+    --primary: 243 75% 59%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    /* Rojo para acciones destructivas / estados críticos. */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 243 75% 59%;
+
+    /* Radio base de bordes: Shadcn lo deriva a lg/md/sm. */
+    --radius: 0.5rem;
+  }
+
+  /* ---------- Tema OSCURO (al añadir la clase .dark al <html>) ---------- */
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 13%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 243 75% 66%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 243 75% 66%;
+  }
+
+  /* Aplicamos los tokens al documento base. */
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

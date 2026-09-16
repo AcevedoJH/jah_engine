@@ -1,0 +1,94 @@
+{
+  // ============================================================
+  // tsconfig.app.json -> OPCIONES PARA EL CODIGO DE LA APLICACION
+  // ============================================================
+  // Este archivo describe como TypeScript debe interpretar el
+  // codigo de /src (los componentes React, hooks, servicios...).
+  //
+  // "compilerOptions": cada clave configura un aspecto del chequeo
+  // de tipos o del sistema de modulos. Vamos linea a linea:
+  "compilerOptions": {
+    // Archivo binario donde se cachean las decisiones de tipos.
+    // `tsc -b` lo reutiliza para no re-analizar archivos sin cambios.
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+
+    // "target": version de ECMAScript a la que se transpila.
+    // es2023 => el codigo resultante puede usar (entre otros)
+    // `Array.findLast`, `structuredClone`, etc.
+    "target": "es2023",
+
+    // "lib": definiciones de APIs disponibles en el entorno.
+    // ES2023 -> funciones del lenguaje; DOM -> document,
+    // window, WebSocket, etc. Sin "DOM" React no compila.
+    "lib": ["ES2023", "DOM"],
+
+    // Sistema de modulos ECMAScript: los imports se mantienen
+    // como ESM (import/export), que es lo que Vite espera.
+    "module": "esnext",
+
+    // Paquetes de tipos globales disponibles. "vite/client"
+    // aporta tipos para importar assets (import logo from './x.svg')
+    // y para variables de entorno import.meta.env.
+    "types": ["vite/client"],
+
+    // Permite importar archivos con extensiones no tipadas (.css)
+    "allowArbitraryExtensions": true,
+
+    // NO revisar los tipos dentro de node_modules. Acelera el
+    // chequeo y evita errores provocados por dependencias de terceros.
+    "skipLibCheck": true,
+
+    // Modo de resolucion de modulos "bundler": optimizado para
+    // herramientas que empaquetan como Vite. Permite imports sin
+    // extension y respeta "paths".
+    "moduleResolution": "bundler",
+
+    // Permite escribir `import x from './archivo.ts'` (con extension
+    // .ts explicita), un requisito del nuevo Vite.
+    "allowImportingTsExtensions": true,
+
+    // IMPERATIVO en ESM: separa imports de TIPO de imports de VALOR.
+    // Tipos provenientes de otros archivos DEBEN usar `import type`.
+    // El transpilador puede asi eliminar esos imports sin ambiguedad.
+    "verbatimModuleSyntax": true,
+
+    // Trata cada archivo como un modulo independiente (evita
+    // ambiguedades de scripts globales).
+    "moduleDetection": "force",
+
+    // No emitimos JavaScript (Vite lo hace): solo chequeo de tipos.
+    "noEmit": true,
+
+    // JSX moderno de React: `jsx: react-jsx`. No necesitamos
+    // importar React en cada archivo porque el compilador inserta
+    // automaticamente las llamadas internas.
+    "jsx": "react-jsx",
+
+    // --- Reglas de calidad (linting estatico) ---
+
+    // Fallo si hay variables locales declaradas pero sin usar.
+    "noUnusedLocals": true,
+    // Fallo si hay parametros de funcion sin usar.
+    "noUnusedParameters": true,
+
+    // Prohibe sintaxis que NO se pueda borrar de forma segura
+    // (enums, namespaces, decoradores). Garantiza que el codigo
+    // sea 100% "erasable" por el transpilador. Por eso usaremos
+    // uniones de strings en lugar de enums en todo el proyecto.
+    "erasableSyntaxOnly": true,
+
+    // En switch: error si un case "cae" al siguiente sin break/return.
+    "noFallthroughCasesInSwitch": true,
+
+    // --- Ruta absoluta "@/" (necesaria para Shadcn UI) ---
+    // A partir de TypeScript 4.1 ya NO hace falta "baseUrl": los
+    // "paths" se resuelven relativos a la ubicacion de ESTE tsconfig.
+    // "@/*" -> "./src/*": permite `import X from '@/types'`
+    // en lugar de los frágiles `../../../../types`.
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  // "include": que carpetas deben ser analizadas por este proyecto.
+  "include": ["src"]
+}

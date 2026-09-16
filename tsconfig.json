@@ -1,0 +1,24 @@
+{
+  // ============================================================
+  // JAH ENGINE - tsconfig.json (configuracion RAZ del proyecto)
+  // ============================================================
+  // Este archivo es un "solution file": no compila codigo por si
+  // mismo, sino que delega en dos sub-proyectos apuntados por
+  // "references":
+  //   - tsconfig.app.json  -> cubre el codigo de la aplicacion (src/)
+  //   - tsconfig.node.json -> cubre los archivos de Node (vite.config.ts)
+  // Esta separacion es el estandar de Vite + TypeScript y permite
+  // que cada contexto use OPCIONES DE COMPILACION diferentes
+  // (por ejemplo: el navegador necesita "DOM" en "lib", mientras
+  // que el archivo de configuracion de Vite necesita "node").
+  //
+  // Por que se compila con `tsc -b` (flag -b = build)?
+  // Porque "references" requiere compilacion por proyecto (modo
+  // project references) y el flag -b se encarga de compilarlos,
+  // cachear resultados (tsbuildinfo) y respetar dependencias.
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

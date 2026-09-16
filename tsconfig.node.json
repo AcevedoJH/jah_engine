@@ -1,0 +1,51 @@
+{
+  // ============================================================
+  // tsconfig.node.json -> OPCIONES PARA HERRAMIENTAS DE NODE
+  // ============================================================
+  // Este proyecto cubre unicamente archivos que se ejecutan en
+  // Node.js (hoy por hoy, vite.config.ts). Al estar separado del
+  // proyecto de la aplicacion, puede pedir "node" como libreria
+  // global (process, __dirname...) sin contaminar el codigo del
+  // navegador, que no tiene esas APIs.
+  "compilerOptions": {
+    // Cache binaria del build incremental del proyecto.
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+
+    // Sintaxis objetivo: ES2023 (lo que soporta el runtime moderno).
+    "target": "es2023",
+
+    // Librerias de entorno disponibles: "node" expone los tipos de
+    // process, fs, path, etc. (gracias a @types/node en devDeps).
+    "lib": ["ES2023"],
+
+    // Tipos globales: node (process.env, NodeJS.Timeout...).
+    "types": ["node"],
+
+    // No revisar los tipos internos de dependencias (más rápido).
+    "skipLibCheck": true,
+
+    // "module": "nodenext" para archivos .ts que importan + ejecutan
+    // como Node ESM (vite.config.ts usa import.meta.url).
+    "module": "nodenext",
+
+    // Igual que en la aplicacion: permite imports con extension .ts.
+    "allowImportingTsExtensions": true,
+
+    // Separar imports de tipo y de valor (obligatorio en ESM puro).
+    "verbatimModuleSyntax": true,
+
+    // Cada archivo se trata como modulo independiente.
+    "moduleDetection": "force",
+
+    // Solo chequeo de tipos, sin emitir JS (Vite transpila solo).
+    "noEmit": true,
+
+    // --- Reglas de calidad idénticas a la app ---
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  // Que archivos analizamos aqui.
+  "include": ["vite.config.ts"]
+}

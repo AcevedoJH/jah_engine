@@ -1,0 +1,39 @@
+{
+  "name": "jah_engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "JAH Engine - Plataforma de observabilidad, benchmarking y resiliencia de infraestructura (proyecto educativo DevOps)",
+  "_comment_grupo_1_meta": "JSON estandar NO permite comentarios //, por eso documentamos cada seccion con claves especiales _comment_*. Estas claves son inofensivas para npm, Vite y TypeScript, pero nos sirven como guia pedagogica de cada dependencia.",
+  "_comment_grupo_2_scripts": "Scripts de ciclo de vida: dev (servidor de desarrollo con HMR de Vite), build (primero valida tipos con tsc -b y luego genera el bundle de produccion), lint (oxlint: linter ultra rapido en Rust que sustituye a ESLint) y preview (sirve el bundle de produccion localmente).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "_comment_grupo_3_dependencias": "Dependencias de RUNTIME (van al bundle de produccion): React 19 con su DOM, React Router 7 para las rutas del dashboard, Tailwind v3 + PostCSS + Autoprefixer para la capa de estilos utilitarios, Recharts para graficas de percentiles/throughput en tiempo real, lucide-react para iconos, y las utilidades de Shadcn UI (clsx + tailwind-merge + class-variance-authority) para variantes de componentes.",
+  "dependencies": {
+    "autoprefixer": "^10.6.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.46.0",
+    "postcss": "^8.5.28",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.4",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^3.4.19"
+  },
+  "_comment_grupo_4_devDependencias": "Dependencias de DESARROLLO (SIGMA solo para compilar, no entran al bundle): Vite 8 como bundler/dev-server, el plugin oficial de React para HMR y Fast Refresh, TypeScript 6 para el chequeo de tipos, oxlint como linter y @types/node para usar APIs de Node (p. ej. fileURLToPath) dentro de vite.config.ts.",
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}

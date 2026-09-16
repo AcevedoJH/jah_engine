@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- ============================================================
+     JAH ENGINE - index.html
+     Punto de entrada HTML de la SPA (single page application).
+     Vite inyecta aqui el bundle de JavaScript compilado y el CSS.
+     Notable: <div id="root"> es el nodo donde React monta la app;
+     el <script type="module"> carga main.tsx (uso de modulos ESM).
+     ============================================================ -->
+<html lang="es">
+  <head>
+    <!-- Codificacion de caracteres: acentos espanoles sin problemas -->
+    <meta charset="UTF-8" />
+
+    <!-- Icono del navegador (SVG en la carpeta public/) -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Viewport: hace la app responsiva en moviles. initial-scale=1
+         evita que el navegador "haga zoom" de mas en pantallas chicas. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Meta SEO/descripcion especifica del proyecto -->
+    <meta
+      name="description"
+      content="JAH Engine - Observabilidad, benchmarking y resiliencia de infraestructura DevOps"
+    />
+
+    <title>JAH Engine | Dashboard de Infraestructura</title>
+  </head>
+  <body>
+    <!-- En React decimos "no toques el DOM, deja que React lo haga":
+         este div vacio es el UNICO lugar que React administrara. -->
+    <div id="root"></div>
+
+    <!-- type="module" activa la carga ESM: main.tsx es el origen de
+         todos los imports de la aplicacion. -->
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
