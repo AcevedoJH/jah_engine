@@ -92,3 +92,28 @@ export function formatClockTime(iso: string | null | undefined): string {
     second: '2-digit',
   })
 }
+
+/**
+ * Formatea el instante ACTUAL a hora local corta (HH:MM:SS).
+ * A diferencia de formatClockTime (que parte de una fecha dada), esta
+ * variante sirve para etiquetas "ahora mismo", p. ej. marcar el reloj
+ * del UI cuando aún no llegó el primer tick del servicio.
+ *
+ * @returns Hora local del momento de la llamada.
+ */
+export function formatClockTimeFromNow(): string {
+  return formatClockTime(new Date().toISOString())
+}
+
+/**
+ * Formatea un número con separador de miles y sin decimales.
+ * Ej: 1234567 -> "1.234.567".
+ *
+ * @param value        - Número a formatear.
+ * @param fallbackText - Texto si el número no es finito.
+ * @returns Número formateado en locale español.
+ */
+export function formatNumber(value: number, fallbackText = '--'): string {
+  if (!Number.isFinite(value)) return fallbackText
+  return value.toLocaleString('es-ES')
+}
