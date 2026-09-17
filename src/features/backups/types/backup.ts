@@ -39,11 +39,18 @@
    ========================== DESTINOS REMOTOS ==========================
    ===================================================================== */
 
-/** Proveedores de almacenamiento remoto soportados (Rclone/S3 eq.). */
-export type RemoteProvider = 's3' | 'rclone' | 'b2'
+/**
+ * Proveedores de almacenamiento remoto soportados (Rclone/S3 eq.).
+ * 'sftp' se incluye porque es el destino "sin cifrar" tipico de un
+ * NAS local/remoto, y la UI lo pinta en rojo para avisar al operador.
+ */
+export type RemoteProvider = 's3' | 'rclone' | 'b2' | 'sftp'
 
-/** Estado de salud del destino remoto (visible en las tarjetas). */
-export type RemoteStatus = 'online' | 'offline'
+/**
+ * Estado de salud del destino remoto (visible en las tarjetas).
+ * Llega del backend conforme lo reporta el orquestador de backups.
+ */
+export type RemoteStatus = 'connected' | 'unreachable'
 
 /**
  * Destino remoto donde aterrizan los backups (un "remote" de Rclone
@@ -57,7 +64,7 @@ export type RemoteStatus = 'online' | 'offline'
  *                        de Rclone (cifrado AES-256 LOCAL).
  * @param usedStorageGb - Espacio consumido a dia de hoy (GiB enteros)
  *                        para las metricas del encabezado.
- * @param status        - online (responde) u offline (caido).
+ * @param status        - connected (responde) u unreachable (caido).
  */
 export interface RemoteTarget {
   readonly id: string

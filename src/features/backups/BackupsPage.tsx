@@ -3,45 +3,42 @@
  * JAH ENGINE - Storage & Remote Backups
  * (src/features/backups/BackupsPage.tsx)
  * ============================================================
- * Vista COMPLETA del Modulo 3: gestiona destinos remotos cifrados
- * (Rclone/S3), jobs de backup con ejecucion manual y la tabla de
- * snapshots restaurables.
+ * Vista COMPLETA del Modulo 3: destinos remotos cifrados (Rclone/S3),
+ * jobs de backup con ejecucion manual y snapshots restaurables.
+ *
+ * ============ SERVICE LAYER: LA UI NO CONOCE EL ORIGEN DE DATOS ============
+ * Esta pagina NO importa ni una constante mock ni consulta fetch:
+ * SOLO consume las funciones expuestas por services/backupService.ts.
+ *   - VITE_USE_MOCK_DATA=true  -> la capa responde desde mockBackupData
+ *     con una latencia artificial de 300ms.
+ *   - VITE_USE_MOCK_DATA=false -> la misma UI, sin tocar una linea,
+ *     pasa a consultar la API real (VITE_API_BASE_URL).
+ * Beneficio: podemos construir toda la interfaz con datos simulados y
+ * "enchufarla" al backend solo con girar una variable de entorno.
  *
  * ============ REGLA 3-2-1 (cultura del modulo) ============
- * La regla de oro de la resiliencia:
- *   - 3 copias de los datos          (original + 2 respaldos).
- *   - 2 medios distintos             (local + nube, por ej.).
- *   - 1 copia FUERA del sitio        (sobrevive a un desastre local).
- * Los "destinos remotos" de abajo son las ubicaciones OFF-SITE de esa
- * tercera copia; los snapshots son los puntos de restauracion.
+ * 3 copias de los datos, en 2 medios distintos, 1 copia FUERA del
+ * sitio. Los destinos remotos de abajo son esa copia off-site; los
+ * snapshots, sus puntos de restauracion.
  *
- * ============ RCLONE CON CIFRADO LOCAL (crypt) ============
- * Rclone puede envolver cualquier destino (S3, B2, SFTP...) con una
- * capa "crypt": los ficheros se cifran AES-256 EN EL EQUIPO LOCAL
- * ANTES de subir. El proveedor nunca ve el contenido en claro.
- * Por eso cada tarjeta de destino indica si es cifrado ("AES-256"),
- * la configuracion RECOMENDADA para la copia por definicion.
- *
- * ============ ESTADOS ASINCRONOS EN REACT ============
- * Este componente demuestra el patron basico de una operacion async:
- *   1. La UI recuerda "que" operacion esta pendiente con UN solo
- *      estado: `runningJobId` (fabrica de la carga).
- *   2. Mientras dura, el boton queda DESHABILITADO y muestra un
- *      spinner: el usuario ve el estado y no puede lanzar otra.
- *   3. Al terminar, el estado vuelve a null y la UI refleja el
- *      resultado (el job pasa a 'completed' con su nuevo lastRun).
- * En produccion, el setTimeout seria una llamada a la API con
- * try/catch/finally y gestion de rechazo; aqui simulamos la latencia
- * para no depender de backend.
+ * ============ PATRON DE CARGA ASINCRONA EN LA VISTA ============
+ *  - Carga inicial: useEffect + Promise.all (las 3 lecturas en
+ *    paralelo). Con un flag `cancelled`/mountedRef evitamos hacer
+ *    setState sobre un componente ya desmontado (fuga clasica).
+ *  - Acciones ("Ejecutar Ahora", "Restaurar"): los handlers son
+ *    `async`; mientras la Promise esta en vuelo, un unico id en
+ *    estado (runningJobId / restoringId) deshabilita la UI y pinta
+ *    el spinner. Al resolver, se aplica el resultado del servicio.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   CalendarClock,
   CheckCircle2,
   Cloud,
   DatabaseBackup,
+  Folder,
   HardDrive,
   Loader2,
   Lock,
@@ -63,125 +60,8 @@ import {
 import { BackToDashboardButton } from '@/components/layout/BackToDashboardButton'
 import { cn } from '@/utils/cn'
 import { formatBytes, formatClockTime, formatNumber } from '@/utils/format'
-import type {
-  BackupJob,
-  BackupJobStatus,
-  RemoteProvider,
-  RemoteTarget,
-  Snapshot,
-} from './types/backup'
-
-/* =====================================================================
-   ========================= DATOS DE DEMO (MOCK) ======================
-   =====================================================================
-   Datos completamente tipados con los contratos del modulo. En el
-   futuro vendran del microservicio (vía WebSocket/integración), pero
-   su forma obliga a que la UI ya este preparada. */
-
-const REMOTE_TARGETS: RemoteTarget[] = [
-  {
-    id: 'r1',
-    name: 'S3 - Produccion',
-    provider: 's3',
-    bucketOrPath: 'jah-prod-backups',
-    encrypted: true,
-    usedStorageGb: 412.6,
-    status: 'online',
-  },
-  {
-    id: 'r2',
-    name: 'B2 - Archivado',
-    provider: 'b2',
-    bucketOrPath: 'jah-archive',
-    encrypted: true,
-    usedStorageGb: 188.2,
-    status: 'online',
-  },
-  {
-    id: 'r3',
-    name: 'Rclone NAS Casa',
-    provider: 'rclone',
-    bucketOrPath: 'nas:backups-sin-cifrar',
-    encrypted: false,
-    usedStorageGb: 96.4,
-    status: 'offline',
-  },
-]
-
-const BACKUP_JOBS: BackupJob[] = [
-  {
-    id: 'j1',
-    name: 'NAS - Fotos Julio',
-    sourcePath: '/vol1/fotos',
-    targetId: 'r1',
-    cron: '0 2 * * *',
-    lastRun: '2026-09-16T02:00:00',
-    nextRun: '2026-09-18T02:00:00',
-    status: 'active',
-    sizeMb: 204_800,
-  },
-  {
-    id: 'j2',
-    name: 'Servidor - Bases MySQL',
-    sourcePath: '/var/backups/db',
-    targetId: 'r1',
-    cron: '30 3 * * *',
-    lastRun: '2026-09-16T03:30:00',
-    nextRun: '2026-09-18T03:30:00',
-    status: 'completed',
-    sizeMb: 12_800,
-  },
-  {
-    id: 'j3',
-    name: 'Documentos - Archivado legal',
-    sourcePath: '/srv/legal',
-    targetId: 'r2',
-    cron: '0 5 * * 1',
-    lastRun: '2026-09-14T05:00:00',
-    nextRun: '2026-09-21T05:00:00',
-    status: 'paused',
-    sizeMb: 3_200,
-  },
-]
-
-const SNAPSHOTS: Snapshot[] = [
-  {
-    id: 's1',
-    jobId: 'j1',
-    jobName: 'NAS - Fotos Julio',
-    timestamp: '2026-09-16T02:00:00',
-    size: 109_678_592,
-    target: 'S3 - Produccion',
-    checksum: 'a41f9a2b_9c3e...b5d0',
-  },
-  {
-    id: 's2',
-    jobId: 'j1',
-    jobName: 'NAS - Fotos Julio',
-    timestamp: '2026-09-15T02:00:00',
-    size: 109_488_640,
-    target: 'S3 - Produccion',
-    checksum: 'c29e8d1f_77ab...f120',
-  },
-  {
-    id: 's3',
-    jobId: 'j2',
-    jobName: 'Servidor - Bases MySQL',
-    timestamp: '2026-09-16T03:30:00',
-    size: 13_421_772,
-    target: 'S3 - Produccion',
-    checksum: '81cd6ce4_00aa...c9e7',
-  },
-  {
-    id: 's4',
-    jobId: 'j3',
-    jobName: 'Documentos - Archivado legal',
-    timestamp: '2026-09-14T05:00:00',
-    size: 3_355_443,
-    target: 'B2 - Archivado',
-    checksum: 'f5b0de12_44cc...8d21',
-  },
-]
+import type { BackupJob, BackupJobStatus, RemoteProvider, RemoteTarget, Snapshot } from './types/backup'
+import * as backupService from './services/backupService'
 
 /* =====================================================================
    ======================= MAPAS DE PRESENTACION ========================
@@ -192,6 +72,8 @@ const PROVIDER_ICONS: Record<RemoteProvider, LucideIcon> = {
   s3: Cloud,
   rclone: HardDrive,
   b2: Server,
+  // SFTP: navega rutas de filesystem remoto, por eso un icono de carpeta.
+  sftp: Folder,
 }
 
 /** Etiquetas legibles de estado del job para el badge de la fila. */
@@ -219,86 +101,126 @@ const JOB_STATUS_STYLES: Record<BackupJobStatus, string> = {
 /** Vista completa de Storage & Remote Backups. */
 export function BackupsPage() {
   /* -------------------------------------------------------------
-     ESTADO DE LOS JOBS (se pueden MUTAR: "Ejecutar Ahora").
-     `runningJobId` es la "fabrica de la carga": mientras tenga un
-     id, sabemos QUÉ job está ejecutandose y la UI bloquea re-espisodios.
+     ESTADO DE DATOS (llegan del SERVICE LAYER, no de constantes).
+     Se inicializan vacios y se rellenan en el useEffect de carga.
+     `isLoading` / `loadError` drenar el estado de la carga inicial.
      ------------------------------------------------------------- */
-  const [jobs, setJobs] = useState<BackupJob[]>(BACKUP_JOBS)
-  const [runningJobId, setRunningJobId] = useState<string | null>(null)
+  const [targets, setTargets] = useState<RemoteTarget[]>([])
+  const [jobs, setJobs] = useState<BackupJob[]>([])
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  /* `restoringId` sigue el mismo patron para la accion "Restaurar"
-     de los snapshots: un unico id pendiente = un unico spinner. */
+  /* -------------------------------------------------------------
+     FABRICAS DE CARGA DE ACCIONES:
+     `runningJobId` -> el job que se esta ejecutando ahora (spinner).
+     `restoringId`  -> el snapshot que se esta restaurando (spinner).
+     Mientras un id es distinto de null, la UI bloquea repetir la
+     misma accion (single-flight).
+     ------------------------------------------------------------- */
+  const [runningJobId, setRunningJobId] = useState<string | null>(null)
   const [restoringId, setRestoringId] = useState<string | null>(null)
 
-  /* Ref del temporizador activo: al desmontarse la pagina limpiamos
-     el timeout pendiente para no hacer setState sobre componente
-     desmontado (fuga clasica de la asincronia en React). */
-  const timerRef = useRef<number | null>(null)
+  /* REF de ciclo de vida: true mientas el componente esta montado.
+     Todos los `await` de este componente consultan este ref ANTES de
+     tocar estado, para no setState sobre un nodo ya desmontado. */
+  const mountedRef = useRef(true)
 
-  // Cleanup de ciclo de vida: si el usuario navega a otra vista
-  // mientras un "run" simulado sigue en vuelo, cancelamos el timer.
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+  /* -------------------------------------------------------------
+     CARGA INICIAL (paralela) desde la capa de servicio.
+     `loadData` esta en useCallback para poder invocarlo tanto desde
+     el useEffect como desde el boton "Reintentar", manteniendo la
+     MENTIRA del efecto estable (deps []). Dentro se atrapa el error
+     y se vuelca en `loadError` para pintar una vista de recuperacion.
+     ------------------------------------------------------------- */
+  const loadData = useCallback(async (): Promise<void> => {
+    try {
+      // Promise.all lanza las 3 lecturas a la vez (latencia total ~300ms
+      // en vez de 900ms) y se resuelve cuando estan las 3.
+      const [remoteTargets, backupJobs, restorePoints] = await Promise.all([
+        backupService.getRemoteTargets(),
+        backupService.getBackupJobs(),
+        backupService.getSnapshots(),
+      ])
+      if (!mountedRef.current) return
+      setTargets(remoteTargets)
+      setJobs(backupJobs)
+      setSnapshots(restorePoints)
+    } catch (error) {
+      if (!mountedRef.current) return
+      setLoadError(error instanceof Error ? error.message : 'Error desconocido al cargar.')
+    } finally {
+      if (mountedRef.current) setIsLoading(false)
     }
   }, [])
 
+  useEffect(() => {
+    // En StrictMode el efecto se monta/desmonta/monta: RESTAURAMOS el
+    // flag a true en cada arranque para que la segunda carga funcione.
+    mountedRef.current = true
+    // EXCEPCIÓN DOCUMENTADA: patron canonico de data fetching (fetch on
+    // mount); loadData() establece isLoading() tras su await. Misma
+    // justificación que src/features/network/hooks/useTelemetry.ts.
+    // oxlint-disable-next-line react/set-state-in-effect
+    void loadData()
+    return () => {
+      mountedRef.current = false
+    }
+  }, [loadData])
+
   /* -------------------------------------------------------------
-     METRICAS DEL ENCABEZADO (derivadas del estado/constantes).
-     Suma del espacio usado, destinos online, jobs no-pausados y
-     numero de snapshots guardados.
+     METRICAS DERIVADAS (ahora del ESTADO, no de constantes mock).
      ------------------------------------------------------------- */
-  const totalUsedStorageGb = REMOTE_TARGETS.reduce(
-    (suma, remote) => suma + remote.usedStorageGb,
-    0,
-  )
-  const onlineTargets = REMOTE_TARGETS.filter((r) => r.status === 'online').length
+  const totalUsedStorageGb = targets.reduce((suma, remote) => suma + remote.usedStorageGb, 0)
+  const connectedTargets = targets.filter((r) => r.status === 'connected').length
   const activeJobs = jobs.filter((j) => j.status !== 'paused').length
 
-  /* Mapa remoteId -> nombre del destino, para resolver la fila de
-     un job (targetId) sin estar buscando en cada render con find(). */
-  const targetNameById = new Map(REMOTE_TARGETS.map((r) => [r.id, r.name]))
+  /* Mapa remoteId -> nombre del destino (resolucion O(1) en las filas
+     de jobs en lugar de un find() por render). */
+  const targetNameById = new Map(targets.map((r) => [r.id, r.name]))
 
   /* -------------------------------------------------------------
-     "EJECUTAR AHORA" (operacion asincrona simulada)
-     -------------------------------------------------------------
-     1. Marcamos el job como 'running' y guardamos su id.
-     2. setTimeout simula la latencia de red/frontal de Rclone.
-     3. Al terminar: el job pasa a 'completed' y lastRun se actualiza
-        al instante actual (ISO), porque de verdad "corrio".
-     El estado `runningJobId` se cierra en null para liberar la UI.
+     ACCION: "EJECUTAR AHORA" (async, optimistic update).
+     1. Marcamos el job como 'running' DE INMEDIATO (optimismo: la UI
+        responde antes de que termine el servidor).
+     2. `await backupService.runBackupJob(jobId)` resuelve con el job
+        actualizado; lo sustituimos de una vez en la lista.
+     3. Si falla, revertimos el job a 'failed' para que el error sea
+        visible. En modo mock nunca llega, pero el camino esta listo
+        para la API real.
      ------------------------------------------------------------- */
-  function runJobNow(jobId: string): void {
-    // Sentinela: si ya hay un job en vuelo, ignoramos (evita que el
-    // usuario lance dos ejecuciones simultaneas de un mismo job).
+  async function runJobNow(jobId: string): Promise<void> {
     if (runningJobId !== null) return
-
     setRunningJobId(jobId)
-    setJobs((prev) =>
-      prev.map((job) => (job.id === jobId ? { ...job, status: 'running' } : job)),
-    )
-
-    timerRef.current = window.setTimeout(() => {
-      setJobs((prev) =>
-        prev.map((job) =>
-          job.id === jobId
-            ? { ...job, status: 'completed', lastRun: new Date().toISOString() }
-            : job,
-        ),
-      )
-      setRunningJobId(null)
-    }, 1800)
+    setJobs((prev) => prev.map((job) => (job.id === jobId ? { ...job, status: 'running' } : job)))
+    try {
+      const updated = await backupService.runBackupJob(jobId)
+      if (!mountedRef.current) return
+      setJobs((prev) => prev.map((job) => (job.id === jobId ? updated : job)))
+    } catch {
+      if (!mountedRef.current) return
+      setJobs((prev) => prev.map((job) => (job.id === jobId ? { ...job, status: 'failed' } : job)))
+    } finally {
+      if (mountedRef.current) setRunningJobId(null)
+    }
   }
 
-  /* "Restaurar" snapshot: misma idea (loading con id unico), pero
-     aqui NO mutamos el snapshot: en produccion se descargaria de un
-     punto concreto. Tras el wait volvemos al reposo. */
-  function restoreSnapshot(snapshotId: string): void {
+  /* -------------------------------------------------------------
+     ACCION: "RESTAURAR" snapshot. No devuelve datos del snapshot;
+     la Promise es solo una senal de "terminado/fallido" para apagar
+     el spinner. El nombre coincide con el de la capa de servicio,
+     por eso alli lo usamos cualificado (backupService.restoreSnapshot).
+     ------------------------------------------------------------- */
+  async function restoreSnapshot(snapshotId: string): Promise<void> {
     if (restoringId !== null) return
     setRestoringId(snapshotId)
-    timerRef.current = window.setTimeout(() => {
-      setRestoringId(null)
-    }, 1600)
+    try {
+      await backupService.restoreSnapshot(snapshotId)
+    } catch {
+      // En produccion aqui habria un toast de "restauracion fallida".
+    } finally {
+      if (mountedRef.current) setRestoringId(null)
+    }
   }
 
   return (
@@ -313,245 +235,297 @@ export function BackupsPage() {
         </p>
       </header>
 
-      {/* ================= RESUMEN / METRICAS ================= */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* ============ ESTADOS DE CARGA INICIAL Y ERROR ============ */}
+      {isLoading ? (
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Espacio usado en remoto</p>
-            <p className="mt-1 flex items-end gap-1 font-mono text-xl font-semibold text-foreground">
-              {formatNumber(Number(totalUsedStorageGb.toFixed(1)))}
-              <span className="text-xs text-muted-foreground">GiB</span>
-            </p>
+          <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            Cargando datos desde la capa de servicio...
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Destinos activos</p>
-            <p className="mt-1 font-mono text-xl font-semibold text-foreground">
-              {onlineTargets}/{REMOTE_TARGETS.length}
-            </p>
+      ) : loadError !== null ? (
+        <Card className="border-rose-500/40">
+          <CardContent className="flex flex-col items-start gap-3 p-6 sm:flex-row sm:items-center">
+            <XCircle className="h-5 w-5 shrink-0 text-rose-500" />
+            <div className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">No se pudieron cargar los datos:</span>{' '}
+              {loadError}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // El reset sincrono se dispara DESDE UN EVENTO (click),
+                // permitido por la norma, y no desde dentro del efecto.
+                setLoadError(null)
+                setIsLoading(true)
+                void loadData()
+              }}
+              className="shrink-0"
+            >
+              Reintentar
+            </Button>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Jobs activos</p>
-            <p className="mt-1 font-mono text-xl font-semibold text-foreground">{activeJobs}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Snapshots</p>
-            <p className="mt-1 font-mono text-xl font-semibold text-foreground">
-              {SNAPSHOTS.length}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Callout didactico de la regla 3-2-1 (cultura del modulo). */}
-      <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-        <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
-        <p>
-          <span className="font-semibold text-foreground">Regla 3-2-1:</span> 3 copias de tus
-          datos, en 2 medios distintos, y 1 copia <span className="font-medium text-foreground">fuera del sitio</span>.
-          Los destinos remotos de abajo son esa copia off-site; los snapshots, sus puntos de
-          restauración.
-        </p>
-      </div>
-
-      {/* ================= DESTINOS REMOTOS (Rclone/S3) ================= */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Destinos cifrados (Rclone Remotes)</CardTitle>
-          <CardDescription>
-            Cada tarjeta indica si el destino pasa por una capa crypt (cifrado local AES-256)
-            y si está operativo ahora mismo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {REMOTE_TARGETS.map((remote) => {
-              const ProviderIcon = PROVIDER_ICONS[remote.provider]
-              const isOnline = remote.status === 'online'
-              return (
-                <div
-                  key={remote.id}
-                  className={cn(
-                    'rounded-lg border bg-muted/30 p-3',
-                    isOnline ? 'border-border' : 'border-rose-500/40',
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ProviderIcon className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-semibold text-foreground">{remote.name}</span>
-                    </div>
-                    {isOnline ? (
-                      <span className="flex items-center gap-1 text-[11px] text-emerald-500">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> En línea
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-[11px] text-rose-500">
-                        <XCircle className="h-3.5 w-3.5" /> Caído
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
-                    {remote.bucketOrPath}
-                  </p>
-
-                  <div className="mt-3 flex items-center justify-between">
-                    {remote.encrypted ? (
-                      <Badge variant="outline" className="gap-1 border-emerald-500/40 text-emerald-500">
-                        <Lock className="h-3 w-3" /> AES-256
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="gap-1 text-muted-foreground">
-                        Sin cifrar
-                      </Badge>
-                    )}
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {formatNumber(remote.usedStorageGb)} GiB
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
+      ) : (
+        <>
+          {/* ================= RESUMEN / METRICAS ================= */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Espacio usado en remoto</p>
+                <p className="mt-1 flex items-end gap-1 font-mono text-xl font-semibold text-foreground">
+                  {formatNumber(Number(totalUsedStorageGb.toFixed(1)))}
+                  <span className="text-xs text-muted-foreground">GiB</span>
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Destinos conectados</p>
+                <p className="mt-1 font-mono text-xl font-semibold text-foreground">
+                  {connectedTargets}/{targets.length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Jobs activos</p>
+                <p className="mt-1 font-mono text-xl font-semibold text-foreground">{activeJobs}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Snapshots</p>
+                <p className="mt-1 font-mono text-xl font-semibold text-foreground">
+                  {snapshots.length}
+                </p>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* ================= JOBS DE BACKUP ================= */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Jobs de backup</CardTitle>
-          <CardDescription>
-            Programación cron y ejecución manual con estado de carga en vivo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ul className="divide-y">
-            {jobs.map((job) => {
-              const isThisJobRunning = runningJobId === job.id
-              const isAnyJobRunning = runningJobId !== null
-              const targetName = targetNameById.get(job.targetId) ?? 'Desconocido'
-              return (
-                <li key={job.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-foreground">{job.name}</span>
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                          JOB_STATUS_STYLES[job.status],
+          {/* Callout didactico de la regla 3-2-1. */}
+          <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
+            <p>
+              <span className="font-semibold text-foreground">Regla 3-2-1:</span> 3 copias de tus
+              datos, en 2 medios distintos, y 1 copia{' '}
+              <span className="font-medium text-foreground">fuera del sitio</span>. Los destinos
+              remotos de abajo son esa copia off-site; los snapshots, sus puntos de restauración.
+            </p>
+          </div>
+
+          {/* ================= DESTINOS REMOTOS (Rclone/S3) ================= */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Destinos cifrados (Rclone Remotes)</CardTitle>
+              <CardDescription>
+                Cada tarjeta indica si el destino pasa por una capa crypt (cifrado local AES-256)
+                y si está operativo ahora mismo.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {targets.map((remote) => {
+                  const ProviderIcon = PROVIDER_ICONS[remote.provider]
+                  const isConnected = remote.status === 'connected'
+                  return (
+                    <div
+                      key={remote.id}
+                      className={cn(
+                        'rounded-lg border bg-muted/30 p-3',
+                        isConnected ? 'border-border' : 'border-rose-500/40',
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ProviderIcon className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-semibold text-foreground">
+                            {remote.name}
+                          </span>
+                        </div>
+                        {isConnected ? (
+                          <span className="flex items-center gap-1 text-[11px] text-emerald-500">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> En línea
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] text-rose-500">
+                            <XCircle className="h-3.5 w-3.5" /> No alcanzable
+                          </span>
                         )}
-                      >
-                        {JOB_STATUS_LABELS[job.status]}
-                      </span>
+                      </div>
+
+                      <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
+                        {remote.bucketOrPath}
+                      </p>
+
+                      <div className="mt-3 flex items-center justify-between">
+                        {remote.encrypted ? (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-emerald-500/40 text-emerald-500"
+                          >
+                            <Lock className="h-3 w-3" /> AES-256
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            Sin cifrar
+                          </Badge>
+                        )}
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {formatNumber(remote.usedStorageGb)} GiB
+                        </span>
+                      </div>
                     </div>
-                    <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                      {job.sourcePath} → {targetName}
-                    </p>
-                    <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <CalendarClock className="h-3 w-3" /> cron: <span className="font-mono">{job.cron}</span>
-                      </span>
-                      <span>
-                        última: <span className="font-mono">{formatClockTime(job.lastRun)}</span>
-                      </span>
-                      <span>
-                        próxima: <span className="font-mono">{formatClockTime(job.nextRun)}</span>
-                      </span>
-                      <span>
-                        {formatBytes(job.sizeMb * 1024 * 1024)}
-                      </span>
-                    </p>
-                  </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => runJobNow(job.id)}
-                    disabled={isAnyJobRunning || job.status === 'paused'}
-                    title={
-                      job.status === 'paused'
-                        ? 'El job está pausado: actívalo antes de ejecutarlo'
-                        : 'Lanzar esta copia ahora'
-                    }
-                    className="shrink-0"
+          {/* ================= JOBS DE BACKUP ================= */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Jobs de backup</CardTitle>
+              <CardDescription>
+                Programación cron y ejecución manual con estado de carga en vivo.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ul className="divide-y">
+                {jobs.map((job) => {
+                  const isThisJobRunning = runningJobId === job.id
+                  const isAnyJobRunning = runningJobId !== null
+                  const targetName = targetNameById.get(job.targetId) ?? 'Desconocido'
+                  return (
+                    <li
+                      key={job.id}
+                      className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-foreground">{job.name}</span>
+                          <span
+                            className={cn(
+                              'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                              JOB_STATUS_STYLES[job.status],
+                            )}
+                          >
+                            {JOB_STATUS_LABELS[job.status]}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                          {job.sourcePath} → {targetName}
+                        </p>
+                        <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CalendarClock className="h-3 w-3" /> cron:{' '}
+                            <span className="font-mono">{job.cron}</span>
+                          </span>
+                          <span>
+                            última:{' '}
+                            <span className="font-mono">{formatClockTime(job.lastRun)}</span>
+                          </span>
+                          <span>
+                            próxima:{' '}
+                            <span className="font-mono">{formatClockTime(job.nextRun)}</span>
+                          </span>
+                          <span>{formatBytes(job.sizeMb * 1024 * 1024)}</span>
+                        </p>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void runJobNow(job.id)}
+                        disabled={isAnyJobRunning || job.status === 'paused'}
+                        title={
+                          job.status === 'paused'
+                            ? 'El job está pausado: actívalo antes de ejecutarlo'
+                            : 'Lanzar esta copia ahora'
+                        }
+                        className="shrink-0"
+                      >
+                        {isThisJobRunning ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Ejecutando...
+                          </>
+                        ) : (
+                          <>
+                            <Play className="h-4 w-4" /> Ejecutar Ahora
+                          </>
+                        )}
+                      </Button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+
+          {/* ================= TABLA DE SNAPSHOTS ================= */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Snapshots y restauración</CardTitle>
+              <CardDescription>
+                Cada punto de restauración incluye su checksum SHA-256 de integridad para
+                verificar que los datos llegan completos e intactos.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ul className="divide-y">
+                {snapshots.map((snapshot) => (
+                  <li
+                    key={snapshot.id}
+                    className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center"
                   >
-                    {isThisJobRunning ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Ejecutando...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4" /> Ejecutar Ahora
-                      </>
-                    )}
-                  </Button>
-                </li>
-              )
-            })}
-          </ul>
-        </CardContent>
-      </Card>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                        <span className="font-medium text-foreground">{snapshot.jobName}</span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {formatClockTime(snapshot.timestamp)}
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {formatBytes(snapshot.size)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                        <span>
+                          destino:{' '}
+                          <span className="font-medium text-foreground">{snapshot.target}</span>
+                        </span>
+                        <span title={snapshot.checksum} className="max-w-[200px] truncate font-mono">
+                          sha256:{snapshot.checksum}
+                        </span>
+                      </div>
+                    </div>
 
-      {/* ================= TABLA DE SNAPSHOTS ================= */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Snapshots y restauración</CardTitle>
-          <CardDescription>
-            Cada punto de restauración incluye su checksum de integridad para verificar
-            que los datos llegan completos e intactos.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ul className="divide-y">
-            {SNAPSHOTS.map((snapshot) => (
-              <li key={snapshot.id} className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                    <span className="font-medium text-foreground">{snapshot.jobName}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {formatClockTime(snapshot.timestamp)}
-                    </span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {formatBytes(snapshot.size)}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-                    <span>destino: <span className="font-medium text-foreground">{snapshot.target}</span></span>
-                    <span title={snapshot.checksum} className="max-w-[200px] truncate font-mono">
-                      sha256:{snapshot.checksum}
-                    </span>
-                  </div>
-                </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void restoreSnapshot(snapshot.id)}
+                      disabled={restoringId !== null}
+                      className="shrink-0"
+                    >
+                      {restoringId === snapshot.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" /> Restaurando...
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="h-4 w-4" /> Restaurar
+                        </>
+                      )}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => restoreSnapshot(snapshot.id)}
-                  disabled={restoringId !== null}
-                  className="shrink-0"
-                >
-                  {restoringId === snapshot.id ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" /> Restaurando...
-                    </>
-                  ) : (
-                    <>
-                      <RotateCcw className="h-4 w-4" /> Restaurar
-                    </>
-                  )}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
-
+      {/* Boton compartido de retorno, visible siempre (incluso en carga). */}
       <BackToDashboardButton />
     </section>
   )
