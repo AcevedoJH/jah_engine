@@ -162,6 +162,62 @@ function MiniKpi({
 }
 
 /* =====================================================================
+   ============== COMPONENTE AUXILIAR: Gráfica Fantasma =================
+   ===================================================================== */
+
+/**
+ * Placeholder ilustrativo para el Empty State: una "gráfica fantasma"
+ * (onda suave con trazo punteado + relleno degradado, todo en gris y
+ * baja opacidad) que ocupa con `flex-1` el sitio de la gráfica real.
+ *
+ * Es puramente decorativo (`aria-hidden`): su única misión es comunicar
+ * de forma visual "aquí se dibujará la latencia" mientras no hay datos.
+ *
+ * ¿Por qué un SVG a mano y no Recharts en vacío? Porque una gráfica
+ * fantasma no debe depender de datos ni renderizar tooltips: es estática
+ * y ligerísima. Al ser un elemento aparte, el salto a la gráfica real
+ * no arrastra estado ni cálculos del chart.
+ */
+function GhostChartPlaceholder() {
+  return (
+    <div className="relative flex min-h-[150px] flex-1 items-center justify-center overflow-hidden rounded-lg border border-dashed bg-gradient-to-b from-muted/40 to-transparent p-4">
+      <svg
+        viewBox="0 0 320 120"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full opacity-40"
+      >
+        <defs>
+          {/* Relleno degradado bajo la onda: gris que se desvanece. */}
+          <linearGradient id="ghostLatencyFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#64748b" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#64748b" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* Área bajo la curva. */}
+        <path
+          d="M0,88 C40,70 62,42 92,54 C122,66 142,28 172,44 C202,60 224,20 252,34 C282,48 302,78 320,68 L320,120 L0,120 Z"
+          fill="url(#ghostLatencyFill)"
+        />
+        {/* Trazo punteado que simula la curva de latencia. */}
+        <path
+          d="M0,88 C40,70 62,42 92,54 C122,66 142,28 172,44 C202,60 224,20 252,34 C282,48 302,78 320,68"
+          fill="none"
+          stroke="#94a3b8"
+          strokeWidth="2"
+          strokeDasharray="6 5"
+        />
+      </svg>
+
+      {/* Mensaje superpuesto, centrado sobre la onda. */}
+      <p className="relative z-10 max-w-[16rem] text-center text-xs text-muted-foreground">
+        Sin tests recientes. Haz clic abajo para iniciar una prueba de rendimiento.
+      </p>
+    </div>
+  )
+}
+
+/* =====================================================================
    ==================== COMPONENTE PRINCIPAL ===========================
    ===================================================================== */
 
@@ -256,7 +312,12 @@ export function BenchmarkWidget({
   }
 
   return (
-    <Card>
+    // ALTURA CONSISTENTE (CSS Grid): `h-full` hace que la tarjeta ocupe
+    // el 100% del wrapper que el grid ya estiró (items-stretch), y
+    // `flex flex-col` permite repartir el contenido en vertical. El
+    // `min-h-[340px]` fija una altura base aunque aún no haya datos, de
+    // modo que esta tarjeta y StorageBackupsWidget queden SIMETRICAS.
+    <Card className="flex h-full min-h-[340px] flex-col">
       {/* Cabecera común a ambos estados: título + badge reactivo. */}
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
@@ -264,22 +325,24 @@ export function BenchmarkWidget({
             <Gauge className="h-5 w-5 text-primary" />
             <CardTitle className="text-base">Benchmark &amp; Profiling</CardTitle>
           </div>
-          {/* El badge solo tiene sentido cuando hay datos que reportar;
-              en reposo el hueco lo ocupa la descripción inferior. */}
-          {hasBenchmarkData && (
-            <span
-              className={cn(
-                'rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                statusBadgeClass,
-              )}
-            >
-              {STATUS_LABELS[result.status]}
-            </span>
-          )}
+          {/* Badge de estado: SIEMPRE visible. En reposo (sin tests)
+              mostramos un badge neutro "Listo" para que la cabecera
+              mantenga la misma estructura que en el estado con datos. */}
+          <span
+            className={cn(
+              'rounded-full px-2.5 py-0.5 text-xs font-semibold',
+              hasBenchmarkData ? statusBadgeClass : 'bg-muted text-muted-foreground',
+            )}
+          >
+            {hasBenchmarkData ? STATUS_LABELS[result.status] : 'Listo'}
+          </span>
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      {/* `flex-1` (crece para rellenar) + `flex flex-col` (columna): el
+          cuerpo ocupa todo el alto sobrante. Dentro, el último elemento
+          usa `mt-auto` para anclarse al borde inferior de la tarjeta. */}
+      <CardContent className="flex flex-1 flex-col gap-4">
         {hasBenchmarkData ? (
           /* ==========================================================
              ESTADO B: CUADRO DE MANDO EN MINIATURA
@@ -394,11 +457,14 @@ export function BenchmarkWidget({
               )}
             </div>
 
-            {/* --- ENLACE RÁPIDO A LA VISTA COMPLETA --- */}
+            {/* --- ENLACE RÁPIDO A LA VISTA COMPLETA ---
+                `mt-auto`: en el layout de columna, empuja el botón al
+                fondo de la tarjeta para que quede alineado con el de
+                StorageBackupsWidget. */}
             <Button
               size="sm"
               variant="outline"
-              className="w-full"
+              className="mt-auto w-full"
               onClick={handleNavigateToBenchmark}
             >
               Ver detalles completos
@@ -407,24 +473,37 @@ export function BenchmarkWidget({
           </>
         ) : (
           /* ==========================================================
-             ESTADO A: REPOSO (modo informativo)
+             ESTADO A: EMPTY STATE (sin datos)
              ==========================================================
-             Sin pruebas previas: el widget actúa como una tarjeta
-             introductoria que explica el módulo y ofrece la acción
-             para entrar en él y lanzar su primera prueba. */
+             GESTION DE EMPTY STATES: en vez de dejar la tarjeta vacía
+             (o más baja que su vecina), damos al usuario un lienzo con
+             una GRÁFICA FANTASMA que comunica "aquí irá una gráfica",
+             un mensaje que explica el siguiente paso y un botón para
+             ejecutarlo. El vacío se convierte así en una invitación a
+             la acción (call to action), no en un hueco muerto.
+
+             La gráfica fantasma ocupa con `flex-1` EXACTAMENTE el
+             espacio que luego ocupará la gráfica real: al pasar al
+             estado con datos, la tarjeta NO cambia de altura (evita el
+             "layout shift"). */
           <>
             <CardDescription className="flex items-center gap-1.5 text-xs">
               <Timer className="h-3.5 w-3.5 shrink-0" />
               Lanza pruebas de estrés HTTP y mide percentiles p95/p99,
               throughput y uso de recursos.
             </CardDescription>
+
+            {/* Gráfica fantasma: rellena el hueco de la futura gráfica. */}
+            <GhostChartPlaceholder />
+
+            {/* Acción principal anclada al fondo con `mt-auto`. */}
             <Button
               variant="outline"
               size="sm"
-              className="w-full"
+              className="mt-auto w-full"
               onClick={handleNavigateToBenchmark}
             >
-              Lanzar Prueba
+              Lanzar Benchmark Ahora
               <ArrowUpRight className="h-4 w-4" />
             </Button>
           </>

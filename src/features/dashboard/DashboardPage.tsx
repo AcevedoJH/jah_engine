@@ -64,15 +64,20 @@ export function DashboardPage() {
             No hace falta media query CSS: Tailwind aplica la clase del
             breakpoint correspondiente segun el ancho del viewport.
 
-         2) `items-start` (ALINEACION DE ITEMS - el arreglo del bug):
-            Por defecto, CSS Grid aplica `align-items: stretch`, que
-            ESTIRA todos los items de una misma fila para igualar sus
-            alturas. Eso es lo que provocaba el "estiramiento vertical":
-            las tarjetas bajas (Benchmark/Backups) se deformaban y
-            aparecian huecos internos enormes. Con `items-start` cada
-            item toma su ALTURA NATURAL (content-based) y la fila deja
-            de forzar simetrias de altura. La simetria que buscamos es
-            de COLUMNAS (mismo ancho), no de alturas.
+         2) `items-stretch` (ALINEACION DE ITEMS - simetria de fila):
+            `align-items: stretch` es el valor POR DEFECTO de Grid: los
+            items de una MISMA fila igualan su altura al hermano mas
+            alto. Lo hacemos EXPLICITO porque es justo lo que queremos
+            en la fila inferior (Benchmark y Backups, una tarjeta por
+            columna): ambas terminan con la MISMA altura y el grid queda
+            simetrico. Para que funcione, cada tarjeta hija usa `h-full`
+            (100% del wrapper ya estirado) y `flex flex-col`, de modo que
+            su interior se reparte y el pie/boton queda abajo.
+            ¿Y el hero (row 1)? Esta SOLO en su fila (col-span-2), sin
+            hermano con quien igualarse: su altura la marca su contenido.
+            Por eso aqui `stretch` no reintroduce el "estiramiento
+            vertical" que sufríamos cuando compartia fila con las otras
+            dos tarjetas apiladas.
 
          3) `gap-6`: separacion uniforme entre celdas, tanto en filas
             como en columnas, sin margenes manuales en cada widget.
@@ -81,7 +86,7 @@ export function DashboardPage() {
             abarque las DOS columnas (formato ancho/panoramico). Los
             otros dos widgets caen solos en la fila inferior, uno por
             columna, en una cuadricula simetrica. */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
         {/* HERO (fila superior): HomeLab Monitor a ancho completo. */}
         <div className="lg:col-span-2">
           <HomeLabMonitorWidget />

@@ -141,7 +141,10 @@ function KpiCell({
  */
 function StorageSkeleton() {
   return (
-    <Card className="animate-pulse">
+    // `h-full` + `min-h-[340px]`: el skeleton adopta la MISMA altura
+    // base que BenchmarkWidget para que, mientras carga, el grid ya
+    // tenga las dos tarjetas simetricas (sin saltos al llegar datos).
+    <Card className="flex h-full min-h-[340px] flex-col animate-pulse">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -151,7 +154,7 @@ function StorageSkeleton() {
           <div className="h-8 w-20 rounded-md bg-muted" />
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-1 flex-col gap-3">
         {/* Simula la descripcion del modulo. */}
         <div className="h-3 w-full rounded bg-muted" />
         {/* Simula el grid 2x2 de KPIs. */}
@@ -175,8 +178,8 @@ function StorageSkeleton() {
  */
 function StorageErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
   return (
-    <Card className="border-destructive/50">
-      <CardContent className="flex flex-col items-center gap-4 py-8">
+    <Card className="flex h-full flex-col border-destructive/50">
+      <CardContent className="flex flex-1 flex-col items-center justify-center gap-4 py-8">
         <div className="rounded-full bg-destructive/10 p-3">
           <AlertTriangle className="h-6 w-6 text-destructive" />
         </div>
@@ -309,7 +312,9 @@ export function StorageBackupsWidget() {
   const snapshotCount = snapshots.length
 
   return (
-    <Card>
+    // `h-full flex flex-col`: ocupa el alto estirado del grid (simetria
+    // con BenchmarkWidget) y permite repartir el interior en vertical.
+    <Card className="flex h-full flex-col">
       {/* Cabecera: titulo con icono de almacenamiento + enlace a la
           vista detallada (patron "hub-and-spoke": el dashboard es el
           hub y cada widget dispara hacia su modulo). */}
@@ -326,7 +331,7 @@ export function StorageBackupsWidget() {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-1 flex-col gap-4">
         <CardDescription className="text-xs">
           Copias cifradas en origen con AES-256 y sincronización remota vía Rclone / S3.
         </CardDescription>
