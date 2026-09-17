@@ -14,9 +14,17 @@
  *      callback `onSubmit`.
  *
  * NO conoce al servicio de simulación ni al hook useBenchmark:
- * esa orquestación la decide el padre (BenchmarkPage, en un paso
- * posterior). Esta separación (componente "tonto" vs. contenedor)
- * mantiene el formulario reutilizable y fácil de testear.
+ * esa orquestación la decide el padre (BenchmarkPage). Esta
+ * separación (componente "tonto" vs. contenedor) mantiene el
+ * formulario reutilizable y fácil de testear.
+ *
+ * PALETA DE COLOR (importante):
+ * El proyecto NO usa colores fijos tipo `slate-*`: usa DESIGN TOKENS
+ * de Shadcn UI (variables CSS definidas en src/index.css y mapeadas
+ * en tailwind.config.js). Clases como `bg-background`, `border-input`,
+ * `text-foreground` o `text-muted-foreground` cambian automáticamente
+ * entre tema claro y oscuro. Usarlas garantiza que el formulario se
+ * vea coherente con el resto del dashboard.
  */
 
 import { useState } from 'react'
@@ -114,7 +122,8 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
      El navegador ya valida el formato URL (input type="url") y el
      mínimo (input type="number" min). Pero hay UNA regla de negocio
      que el HTML no conoce: la concurrencia no puede superar el total
-     de peticiones. La mostramos aquí como texto de ayuda en rojo.
+     de peticiones. La mostramos aquí como texto de ayuda en rojo
+     usando el token `--destructive` del tema.
   */
   const [validationError, setValidationError] = useState<string | null>(null)
 
@@ -125,7 +134,7 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
    * `K extends keyof BenchmarkConfig` garantiza en tiempo de compilación
    * que solo podamos actualizar claves que REALMENTE existen en la
    * config, y que el nuevo valor tenga el tipo correcto de esa clave.
-   * Fer ejemplo: updateConfig('method', 'GET') compila, pero
+   * Por ejemplo: updateConfig('method', 'GET') compila, pero
    * updateConfig('concurrency', 'diez') daría error de tipos.
    *
    * `setConfig(prev => ({...prev, [key]: value}))` crea un NUEVO objeto
@@ -144,7 +153,7 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
   }
 
   /**
-   * Handler del evento de ENVIÓ del formulario.
+   * Handler del evento de ENVÍO del formulario.
    *
    * ¿Por qué tipar el evento como `FormEvent<HTMLFormElement>`?
    * En React, el evento está "sintetizado" (SyntheticEvent) y se
@@ -182,18 +191,20 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
   }
 
   /* --------------------------------------------------------------------
-     Classes CSS reutilizadas de los inputs
+     Classes CSS de los inputs (tokens del tema, NO colores fijos)
      --------------------------------------------------------------------
-     Al definir las clases base EN UNA VARIABLE, aseguramos que todos
-     los campos del formulario se vean consistentes y evitamos repetir
-     la misma cadena Tailwind en cada input (DRY).
+     - `border-input` / `bg-background`: fondo y borde del tema actual.
+     - `text-foreground` / `placeholder:text-muted-foreground`: texto y
+       placeholder con los tokens semánticos.
+     - `focus:ring-ring`: el anillo de foco usa el color primario del
+       motor (índigo), coherente con el resto de componentes.
+     - `disabled:*`: refuerza que el control no es interactivo durante
+       la prueba.
   */
   const inputClasses = [
-    'w-full rounded-md border border-slate-800 bg-slate-900 px-3 py-2',
-    'text-sm text-slate-100 placeholder:text-slate-500',
-    'focus:outline-none focus:ring-2 focus:ring-emerald-500/50',
-    // Estado deshabilitado: reduces la opacidad y el cursor refuerza
-    // que el control no es interactivo durante la prueba.
+    'w-full rounded-md border border-input bg-background px-3 py-2',
+    'text-sm text-foreground placeholder:text-muted-foreground',
+    'focus:outline-none focus:ring-2 focus:ring-ring',
     'disabled:cursor-not-allowed disabled:opacity-50',
   ].join(' ')
 
@@ -208,7 +219,7 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
          validación nativa de formato URL del navegador. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-[180px_1fr]">
         <div className="space-y-1.5">
-          <label htmlFor="benchmark-method" className="pl-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+          <label htmlFor="benchmark-method" className="pl-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Método HTTP
           </label>
           <select
@@ -229,7 +240,7 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="benchmark-url" className="pl-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+          <label htmlFor="benchmark-url" className="pl-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             URL Objetivo
           </label>
           <input
@@ -253,11 +264,12 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
          valores fuera de ese intervalo. */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label htmlFor="benchmark-concurrency" className="text-xs font-medium uppercase tracking-wide text-slate-400">
+          <label htmlFor="benchmark-concurrency" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Concurrencia
           </label>
-          {/* El valor dinámico: cambia en cada arrastre del slider. */}
-          <span className="rounded-md bg-slate-800 px-2 py-0.5 text-sm font-semibold text-emerald-400">
+          {/* El valor dinámico: cambia en cada arrastre del slider.
+              `bg-muted` es el token de fondo secundario del tema. */}
+          <span className="rounded-md bg-muted px-2 py-0.5 text-sm font-semibold text-foreground">
             {config.concurrency}
           </span>
         </div>
@@ -271,9 +283,10 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
           onChange={(event: ChangeEvent<HTMLInputElement>) =>
             updateConfig('concurrency', Number(event.target.value))
           }
-          className="w-full accent-emerald-500"
+          // accent del tema: usamos el token primario del motor.
+          className="w-full accent-primary"
         />
-        <div className="flex justify-between pl-1 text-[10px] text-slate-500">
+        <div className="flex justify-between pl-1 text-[10px] text-muted-foreground">
           <span>1</span>
           <span>100</span>
         </div>
@@ -286,7 +299,7 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
          evento a number con Number() porque HTMLInputElement.value
          SIEMPRE es string, aunque el input sea type="number". */}
       <div className="space-y-1.5">
-        <label htmlFor="benchmark-total" className="pl-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+        <label htmlFor="benchmark-total" className="pl-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Total de Peticiones
         </label>
         <input
@@ -300,17 +313,17 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
           }
           className={inputClasses}
         />
-        <p className="pl-1 text-[11px] text-slate-500">Mínimo 10 peticiones por prueba.</p>
+        <p className="pl-1 text-[11px] text-muted-foreground">Mínimo 10 peticiones por prueba.</p>
       </div>
 
       {/* ======================================================
           4) TIMEOUT POR PETICIÓN
          ======================================================
          Tiempo máximo de espera en ms. Guardamos un valor numérico
-         (assessment de milisegundos) pero lo mostramos en ms con una
-         etiqueta aclaratoria. */}
+         (milisegundos) pero lo mostramos en ms con una etiqueta
+         aclaratoria. */}
       <div className="space-y-1.5">
-        <label htmlFor="benchmark-timeout" className="pl-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+        <label htmlFor="benchmark-timeout" className="pl-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Timeout por Petición (ms)
         </label>
         <input
@@ -328,13 +341,16 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
       </div>
 
       {/* ======================================================
-          VALIDACIÓN DE NEGOCIO (mensaje en rojo)
+          VALIDACIÓN DE NEGOCIO (mensaje en rojo destructivo)
          ======================================================
          Solo se pinta si existe un error de validación. En React
          "todo es condicional": <p> solo monta si la condición es
-         verdadera, evitando retoques de display:none. */}
+         verdadera, evitando retoques de display:none.
+         Usamos `border-destructive` / `bg-destructive/10` /
+         `text-destructive`: los tokens semánticos de error, igual
+         que el widget de HomeLab. */}
       {validationError !== null && (
-        <p className="rounded-md border border-rose-800/60 bg-rose-950/40 px-3 py-2 text-sm text-rose-400">
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {validationError}
         </p>
       )}
@@ -343,10 +359,11 @@ export function BenchmarkForm({ onSubmit, isRunning, onCancel }: BenchmarkFormPr
           BOTÓN PRINCIPAL: DOBLE ROL según isRunning
          ======================================================
          Este es el corazón del comportamiento condicional:
-           - isRunning === false -> "Iniciar Benchmark" (emerald),
-             submit normal que dispara handleSubmit -> onSubmit.
-           - isRunning === true  -> "Detener Prueba" (rose), y el
-             clic se conecta a onCancel en lugar del submit.
+           - isRunning === false -> "Iniciar Benchmark" (emerald,
+             color de acción positiva del proyecto: Badge success usa
+             bg-emerald-500), submit normal -> handleSubmit -> onSubmit.
+           - isRunning === true  -> "Detener Prueba" (rose/destructive),
+             y el clic se conecta a onCancel en lugar del submit.
          ¿Por qué convertir en DETENER en lugar de dejar el botón
          deshabilitado? Porque detener a mitad de test es una acción
          válida que el usuario debe poder ejecutar. Además, al cambiar
