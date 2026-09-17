@@ -28,7 +28,8 @@
  * claro y oscuro.
  */
 
-import { Gauge, PlayCircle, Square } from 'lucide-react'
+import { Gauge, PlayCircle, Square, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BenchmarkChart } from '@/features/benchmark/components/BenchmarkChart'
 import { BenchmarkForm } from '@/features/benchmark/components/BenchmarkForm'
@@ -69,7 +70,9 @@ export function BenchmarkPage() {
   //     cambia el boton a "Detener" cuando la prueba corre.
   //   - onCancel -> stopTest(): el formulario detiene la prueba activa.
   // Tambien consumimos `result` para pintar el avance en tiempo real.
-  const { config, result, isRunning, startTest, stopTest } = useBenchmarkContext()
+  // `resetTest` (del contexto global) es la accion "Limpiar Resultados":
+  // cancela la simulacion si la hubiera y vuelve el estado a 'idle'.
+  const { config, result, isRunning, startTest, stopTest, resetTest } = useBenchmarkContext()
 
   /**
    * Timestamp de `result` es un reloj HH:mm:ss sin fecha, asi que lo
@@ -116,11 +119,39 @@ export function BenchmarkPage() {
          ============================================================
          Delegamos TODA la presentación de métricas al componente
          BenchmarkMetrics, que es "puro": recibe el resultado por
-         props y no conoce el motor. Aquí solo mantiene la tarjeta
-         contenedora y la nota de la última actualización. */}
+         props y no conoce el motor. Aquí solo mantenemos la tarjeta
+         contenedora, la nota de la última actualización y la acción
+         de "Limpiar Resultados". */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Resultado acumulado</CardTitle>
+
+          {/* =================================================
+              BOTÓN "LIMPIAR RESULTADOS" (reinicio del módulo)
+              ---------------------------------------------
+              Conectado a `resetTest()` del hook (vía contexto):
+              cancela la simulación en curso y restaura el estado
+              inicial 'idle'. Ese cambio de estado se PROPAGA por el
+              contexto global: el miniwidget del Dashboard vuelve
+              automáticamente a su pantalla de reposo.
+              ¿Por qué estilizado con variant="outline" y no con el
+              ejemplo fijo `border-slate-700`? El proyecto usa design
+              tokens de Shadcn: `outline` se dibuja con border-border
+              y hover:bg-muted, coherente con el tema claro/oscuro.
+              ¿Por qué deshabilitado durante la ejecución? Para limpiar
+              datos a mitad de un test no tiene sentido; la vía correcta
+              es "Detener Prueba" y, ya detenido, limpiar. Así evitamos
+              destruir telemetría en vivo por un clic accidental. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetTest}
+            disabled={isRunning}
+            title={isRunning ? 'Detén la prueba antes de limpiar los resultados' : 'Vuelve el módulo a su estado inicial'}
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+            Limpiar Resultados
+          </Button>
         </CardHeader>
         <CardContent>
           {/* El componente hijo recibe el resultado emitido por cada

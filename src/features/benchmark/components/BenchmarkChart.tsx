@@ -50,6 +50,7 @@ import {
 } from 'recharts'
 import type { BenchmarkDataPoint } from '../types/benchmark'
 import { LATENCY_CAUTION_MAX_MS, LATENCY_OPTIMAL_MAX_MS } from '../utils/latency'
+import { msToGradientOffset } from '../utils/gradient'
 
 /* =====================================================================
    ============================ PROPS ==================================
@@ -67,34 +68,6 @@ import { LATENCY_CAUTION_MAX_MS, LATENCY_OPTIMAL_MAX_MS } from '../utils/latency
 export interface BenchmarkChartProps {
   timeSeries: BenchmarkDataPoint[]
   isRunning: boolean
-}
-
-/* =====================================================================
-   =========== APLICADOR DE OFFSETS (ms -> % del gradiente) ============
-   ===================================================================== */
-
-/**
- * Convierte un valor de latencia (ms) al offset PERCENTUAL de una
- * parada dentro del gradiente vertical, medido desde la cima (0%).
- *
- * Fórmula: offset = (yMax - valor) / yMax * 100
- * Razonamiento:
- *   - El degradado va de 0% (arriba) a 100% (abajo).
- *   - En el eje Y, "arriba" es la latencia máxima (yMax) y "abajo" es 0.
- *   - Por regla de tres, un valor `v` vive a (v/yMax)% de alto medido
- *     desde abajo; su equivalente desde arriba es el complemento.
- *   - Clampamos a [0, 100] para que valores fuera del dominio (p. ej.
- *     600 ms cuando yMax = 150) queden pegados al borde correcto en
- *     lugar de romper la progresión del degradado (los stops SVG
- *     siempre deben estar ordenados y dentro del rango [0,100]).
- *
- * @param valorMs - Latencia del valor a representar.
- * @param yMax    - Techo del dominio del eje Y (en ms).
- * @returns Offset percentual [0-100] para el atributo offset del <stop>.
- */
-function msToGradientOffset(valorMs: number, yMax: number): number {
-  const raw = ((yMax - valorMs) / yMax) * 100
-  return Math.min(100, Math.max(0, raw))
 }
 
 /* =====================================================================

@@ -25,17 +25,35 @@
  *   ESTADO B - CUADRO DE MANDO: `result.status !== 'idle'`
  *   (una prueba está corriendo, terminó o fue detenida)
  *     -> Miniatura en vivo: badge de estado, barra de progreso
- *        animada, P50 con semáforo de color y contadores de
- *        éxitos/fallos. El flujo de datos entre ambos estados es:
+ *        animada, P95 con semáforo de color, contadores de
+ *        éxitos/fallos y una SPARKLINE (minigráfica) de tendencia
+ *        de latencia. El flujo de datos entre ambos estados es:
  *        props -> renderizado condicional -> clases Tailwind.
  *
  * La transición visual la hace Tailwind por composición: en cada
  * render cambiamos las clases que se aplican (badge, relleno de la
  * barra, colores de cifras) y, cuando hay <transition-all>, el navegador
  * anima la diferencia. No hay librerías de animación: solo CSS.
+ *
+ * ¿POR QUÉ P95 Y NO P50 EN EL KPIs? La mediana (P50) describe al
+ * usuario "promedio", pero un 50% padece latencias PEORES que esa
+ * cifra. P95 es el estándar de la industria (SLO) para el caso
+ * normal-malo: el 95% de las peticiones responden en <= P95, así que
+ * representa la experiencia real de casi todos sin dejarse engañar
+ * por un puñado de outliers (para eso está P99 en la vista completa).
+ * Ver también el bloque de comentarios junto a la variable `p95`.
+ *
+ * ¿QUÉ ES UNA SPARKLINE? Una minigráfica sin ejes, cuadrícula ni
+ * etiquetas: solo la forma de la serie. Su único trabajo es transmitir
+ * de un vistazo la TENDENCIA (¿la latencia sube, baja o se mantiene?).
+ * Se monta con los MISMOS bloques de Recharts que el gráfico grande,
+ * pero silenciados (XAxis/YAxis con hide, sin Tooltip ni grid) y reusa
+ * el MISMO degradado por umbrales: así la zona roja del degradado
+ * coincide con los picos de la miniatura, como en la vista completa.
  */
 
 import type { ReactNode } from 'react'
+import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -55,7 +73,8 @@ import { cn } from '@/utils/cn'
 import { formatNumber } from '@/utils/format'
 import type { BenchmarkResult, BenchmarkRuntimeStatus } from '@/features/benchmark/types/benchmark'
 import { calculateProgress } from '@/features/benchmark/utils/progress'
-import { getLatencyColorClass } from '@/features/benchmark/utils/latency'
+import { getLatencyColorClass, LATENCY_CAUTION_MAX_MS, LATENCY_OPTIMAL_MAX_MS } from '@/features/benchmark/utils/latency'
+import { msToGradientOffset } from '@/features/benchmark/utils/gradient'
 
 /* =====================================================================
    ======================== PROPS DEL COMPONENTE =======================
@@ -107,7 +126,7 @@ const STATUS_LABELS: Record<BenchmarkRuntimeStatus, string> = {
  * Celda compacta del cuadro de mando (una métrica clave).
  * Componente puro interno: no se exporta, solo organiza el JSX.
  *
- * @param label      - Nombre de la métrica (ej. "P50").
+ * @param label      - Nombre de la métrica (ej. "P95").
  * @param value      - Valor formateado (ej. "128").
  * @param unit       - Unidad opcional mostrada tras el valor ("ms").
  * @param colorClass - Clase Tailwind del color de la cifra. Así el
@@ -171,10 +190,38 @@ export function BenchmarkWidget({
   // Porcentaje de avance, compartido por la barra (util centralizado).
   const progressPct = calculateProgress(result.completedRequests, totalRequests)
 
-  // Semáforo del P50: la misma función de umbrales que usa la vista
-  // detalle garantiza coherencia visual entre Dashboard y /benchmark.
-  const p50 = result.percentiles.p50
-  const p50ColorClass = getLatencyColorClass(p50)
+  /* --------------------------------------------------------------
+     SEMÁFORO DEL P95 (percentil de "cola" ligera)
+     --------------------------------------------------------------
+     Elegimos P95 como KPI del gadget por dos razones:
+       1. La MEDIANA (P50) esconde los casos malos: el 50% peor de las
+          peticiones queda por ENCIMA de lo que mostraríamos.
+       2. P95 resume la "cola ligera": solo el 5% de las peticiones son
+          más lentas que esto. Es el estándar de SLOs y resume bien, en
+          UNA cifra, si la experiencia empeora o mejora.
+     `getLatencyColorClass` es la misma función de umbrales de la vista
+     detalle: verde < 100 ms, ámbar 100-400 ms, rojo > 400 ms. Compartir
+     la función garantiza que semáforo y gráfico siempre coincidan. */
+  const p95 = result.percentiles.p95
+  const p95ColorClass = getLatencyColorClass(p95)
+
+  /* --------------------------------------------------------------
+     ESCALA DE LA SPARKLINE (mismo "lenguaje" que el gráfico grande)
+     --------------------------------------------------------------
+     La minigráfica no tiene ejes visibles, pero para que su degradado
+     "signifique" lo mismo que el del gráfico completo necesita el MISMO
+     dominio Y: techo = máximo del historial + 15% de margen. Con ese
+     yMax calculamos los offset (%) de las paradas rojo/ámbar/verde
+     mediante la utilidad compartida msToGradientOffset. De este modo
+     un pico de 600 ms cae en la zona roja superior TANTO en la miniatura
+     como en BenchmarkChart. */
+  const rawMax = result.timeSeries.reduce(
+    (max, punto) => Math.max(max, punto.averageLatency),
+    0,
+  )
+  const yMaxSpark = Math.max(1, rawMax + rawMax * 0.15)
+  const offsetCautela = msToGradientOffset(LATENCY_CAUTION_MAX_MS, yMaxSpark)
+  const offsetOptimo = msToGradientOffset(LATENCY_OPTIMAL_MAX_MS, yMaxSpark)
 
   // El relleno de la barra es verde mientras hay vida ('running' o
   // terminó 'completed'); neutro si la prueba fue detenida o falló.
@@ -264,14 +311,15 @@ export function BenchmarkWidget({
             </div>
 
             {/* --- KPIs EN MINIATURA ---
-                P50 coloreado por el semáforo de umbrales; éxitos en
+                P95 coloreado por el semáforo de umbrales (verde/ámbar/
+                rojo según la latencia de "cola ligera"); éxitos en
                 verde y fallos en rojo, coherente con BenchmarkMetrics. */}
             <div className="grid grid-cols-3 gap-2">
               <MiniKpi
-                label="P50"
-                value={formatNumber(p50)}
+                label="P95"
+                value={formatNumber(p95)}
                 unit="ms"
-                colorClass={p50ColorClass}
+                colorClass={p95ColorClass}
                 icon={<Timer className="h-3 w-3" />}
               />
               <MiniKpi
@@ -286,6 +334,64 @@ export function BenchmarkWidget({
                 colorClass="text-rose-500"
                 icon={<XCircle className="h-3 w-3" />}
               />
+            </div>
+
+            {/* --- SPARKLINE: TENDENCIA DE LATENCIA ---
+                Minigráfica de 50 px de alto entre los KPIs y el botón.
+                ¿Por qué Recharts de nuevo? Reutiliza el MISMO pipeline
+                (AreaChart + Area + dataKey averageLatency) que el
+                gráfico de la vista completa, así la serie es idéntica.
+                Configuración del modo "compacto/minimalista":
+                  - <XAxis hide /> / <YAxis hide />: sin ejes dibujados.
+                  - YAxis con domain [0, yMaxSpark] PERO oculto: la
+                    escala sigue controlando el dibujo (así picos y
+                    valles se colocan igual que en el gráfico grande).
+                  - Sin <CartesianGrid> ni <Tooltip>: no hay ruido de
+                    fondo ni tooltips pesados en una gráfica de 50 px.
+                  - fill="url(#latencyGradient)": el degradado por
+                    umbrales definido en <defs> (id único en esta página). */}
+            <div className="space-y-1">
+              <span className="text-[11px] text-muted-foreground">Tendencia de latencia</span>
+              {result.timeSeries.length === 0 ? (
+                /* Primeros 500 ms del test: el motor aún no ha emitido
+                    el primer tick, la serie está vacía. Un placeholder
+                    honesto evita un área en blanco sin explicación. */
+                <p className="flex h-[50px] items-center justify-center rounded-md border border-dashed border-border text-[11px] text-muted-foreground">
+                  Recolectando muestras...
+                </p>
+              ) : (
+                <div className="rounded-md border border-border bg-card p-1">
+                  <ResponsiveContainer width="100%" height={50}>
+                    <AreaChart
+                      data={result.timeSeries}
+                      margin={{ top: 2, right: 2, bottom: 0, left: 2 }}
+                    >
+                      <defs>
+                        {/* Degradado horizontal de la sparkline: mismo
+                            esquema que BenchmarkChart, paradas rojas en
+                            la cima (latencias altas) y verdes en la base. */}
+                        <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.35} />
+                          <stop offset={`${offsetCautela}%`} stopColor="#fbbf24" stopOpacity={0.35} />
+                          <stop offset={`${offsetOptimo}%`} stopColor="#10b981" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="timestamp" hide />
+                      <YAxis domain={[0, yMaxSpark]} hide />
+                      <Area
+                        type="monotone"
+                        dataKey="averageLatency"
+                        stroke="#10b981"
+                        strokeWidth={1.5}
+                        fill="url(#latencyGradient)"
+                        isAnimationActive={false}
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
 
             {/* --- ENLACE RÁPIDO A LA VISTA COMPLETA --- */}
