@@ -29,6 +29,7 @@
 
 import { Gauge, PlayCircle, Square } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BenchmarkChart } from '@/features/benchmark/components/BenchmarkChart'
 import { BenchmarkForm } from '@/features/benchmark/components/BenchmarkForm'
 import { BenchmarkMetrics } from '@/features/benchmark/components/BenchmarkMetrics'
 import { useBenchmark } from '@/features/benchmark/hooks/useBenchmark'
@@ -134,6 +135,16 @@ export function BenchmarkPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* ============================================================
+          GRAFICO DE LATENCIA EN TIEMPO REAL
+         ============================================================
+         Renderizado justo debajo de las tarjetas de resultado. Recibe
+         el `timeSeries` acumulado por el motor y el flag isRunning.
+         Cada tick nuevo del motor provoca un re-render con un punto
+         más: Recharts redibuja la serie de forma continua (la flecha
+         de datos llega por props, sin polling en este componente). */}
+      <BenchmarkChart timeSeries={result.timeSeries} isRunning={isRunning} />
 
       {/* Accion de calidad de vida: boton ilustrativo del estado. */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
