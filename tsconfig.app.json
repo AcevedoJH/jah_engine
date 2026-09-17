@@ -47,6 +47,11 @@
     // .ts explicita), un requisito del nuevo Vite.
     "allowImportingTsExtensions": true,
 
+    // Permite importar archivos .json como modulos tipados.
+    // Sin esto, `import mock from './data.json'` daria error de
+    // resolucion. Solo necesario aqui (app code) y no en el tsconfig.node.
+    "resolveJsonModule": true,
+
     // IMPERATIVO en ESM: separa imports de TIPO de imports de VALOR.
     // Tipos provenientes de otros archivos DEBEN usar `import type`.
     // El transpilador puede asi eliminar esos imports sin ambiguedad.
