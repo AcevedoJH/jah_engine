@@ -18,6 +18,15 @@
  *  Un componente React debe ser una funcion PURA respecto a sus props
  *  y su estado: mismo estado -> mismo JSX. Los efectos secundarios
  *  (conexiones, timers) viven en hooks, nunca en el cuerpo del render.
+ *
+ * LAYOUT PANORAMICO (CSS Grid, 3 sub-columnas):
+ *  Este widget ocupa la fila "hero" del Dashboard (col-span-full), asi
+ *  que aprovecha el ancho con una rejilla INTERNA de 3 sub-columnas en
+ *  escritorio:
+ *      [ Metricas de hardware ] [ Contenedores ] [ Tuneles + acciones ]
+ *  El truco responsive es `grid-cols-1 lg:grid-cols-3`: en movil las 3
+ *  sub-columnas se APILAN en una sola (orden natural del DOM) y desde
+ *  `lg` se reparten a la par, sin escribir media queries a mano.
  */
 
 import { useNavigate } from 'react-router-dom'
@@ -35,7 +44,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useTelemetry } from '@/features/network/hooks/useTelemetry'
 import { summarizeContainerHealth } from '@/features/network/services/telemetryService'
 import { cn } from '@/utils/cn'
@@ -102,7 +111,7 @@ function ProgressBar({
  */
 function LoadingSkeleton() {
   return (
-    <Card className="w-full max-w-md animate-pulse">
+    <Card className="w-full animate-pulse">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -113,21 +122,33 @@ function LoadingSkeleton() {
         </div>
         <div className="mt-2 h-3 w-full rounded bg-muted" />
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Simula las barras de CPU/RAM */}
-        <div className="space-y-2">
-          <div className="h-4 w-full rounded bg-muted" />
-          <div className="h-4 w-full rounded bg-muted" />
-        </div>
-        {/* Simula la lista de contenedores */}
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-muted" />
-              <div className="h-3 flex-1 rounded bg-muted" />
-              <div className="h-3 w-12 rounded bg-muted" />
+      <CardContent>
+        {/* El skeleton imita la MISMA rejilla que el contenido real
+            (3 sub-columnas en lg) para que no haya "layout shift" al
+            llegar los datos: la tarjeta no cambia de forma. */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Sub-columna 1: hardware. */}
+          <div className="space-y-3">
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="grid grid-cols-2 gap-1.5">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-11 rounded bg-muted" />
+              ))}
             </div>
-          ))}
+          </div>
+          {/* Sub-columna 2: contenedores. */}
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-3 w-full rounded bg-muted" />
+            ))}
+          </div>
+          {/* Sub-columna 3: tuneles + accion. */}
+          <div className="flex flex-col gap-2">
+            <div className="h-3 w-2/3 rounded bg-muted" />
+            <div className="h-6 w-24 rounded-full bg-muted" />
+            <div className="mt-auto h-8 w-full rounded bg-muted" />
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -140,7 +161,7 @@ function LoadingSkeleton() {
  */
 function ErrorState({ error, onRetry }: { error: string; onRetry: () => void }) {
   return (
-    <Card className="w-full max-w-md border-destructive/50">
+    <Card className="w-full border-destructive/50">
       <CardContent className="flex flex-col items-center gap-4 py-8">
         <div className="rounded-full bg-destructive/10 p-3">
           <Thermometer className="h-6 w-6 text-destructive" />
@@ -224,7 +245,7 @@ export function HomeLabMonitorWidget({
         : 'text-emerald-500'
 
   return (
-    <Card className="w-full max-w-md">
+    <Card className="w-full">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -262,164 +283,197 @@ export function HomeLabMonitorWidget({
           </div>
         )}
 
-        {/* --- BARRAS DE CPU / RAM --- */}
-        <div className="space-y-2">
-          <div>
-            <div className="mb-0.5 flex items-center justify-between text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Cpu className="h-3 w-3" /> CPU
-              </span>
-              <span className="font-mono text-foreground">
-                {formatPercent(cpuPercent, 1)}
-              </span>
+        {/* ============================================================
+            REJILLA INTERNA DE 3 SUB-COLUMNAS (formato panoramico)
+           ============================================================
+           `grid-cols-1 lg:grid-cols-3` es responsive puro de Tailwind:
+             - Movil / tablet (antes de `lg`): 1 columna -> las 3
+               secciones se APILAN en el orden del DOM.
+             - Escritorio (`lg`): 3 sub-columnas a la par.
+           OJO: aqui NO ponemos `items-start`; al contrario, dejamos el
+           `align-items: stretch` por defecto para que las 3 celdas
+           tengan la MISMA altura y la sub-columna de acciones pueda
+           anclar sus botones al fondo con `mt-auto`. */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* ----------------------------------------------------------
+              SUB-COLUMNA 1: METRICAS DE HARDWARE
+              Barras de CPU/RAM + KPIs rapidos del host.
+             ---------------------------------------------------------- */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <Cpu className="h-3 w-3" /> Hardware
             </div>
-            <ProgressBar
-              percent={cpuPercent}
-              label=""
-              color={cpuPercent > 80 ? 'bg-destructive' : cpuPercent > 60 ? 'bg-amber-500' : 'bg-emerald-500'}
-            />
-          </div>
 
-          <div>
-            <div className="mb-0.5 flex items-center justify-between text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <HardDrive className="h-3 w-3" /> RAM
-              </span>
-              <span className="font-mono text-foreground">
-                {formatBytes(data.system.memory.used_bytes, 1)} /
-                {formatBytes(data.system.memory.total_bytes, 1)}
-              </span>
+            {/* CPU */}
+            <div>
+              <div className="mb-0.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Cpu className="h-3 w-3" /> CPU
+                </span>
+                <span className="font-mono text-foreground">
+                  {formatPercent(cpuPercent, 1)}
+                </span>
+              </div>
+              <ProgressBar
+                percent={cpuPercent}
+                label=""
+                color={cpuPercent > 80 ? 'bg-destructive' : cpuPercent > 60 ? 'bg-amber-500' : 'bg-emerald-500'}
+              />
             </div>
-            <ProgressBar
-              percent={ramPercent}
-              label=""
-              color={ramPercent > 85 ? 'bg-destructive' : ramPercent > 70 ? 'bg-amber-500' : 'bg-primary'}
-            />
-          </div>
-        </div>
 
-        {/* --- KPIs RAPIDOS --- */}
-        <div className="grid grid-cols-4 gap-1.5 text-center">
-          <div className="rounded border p-1.5">
-            <div className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
-              <Thermometer className="h-2.5 w-2.5" />
-              Temp
+            {/* RAM */}
+            <div>
+              <div className="mb-0.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <HardDrive className="h-3 w-3" /> RAM
+                </span>
+                <span className="font-mono text-foreground">
+                  {formatBytes(data.system.memory.used_bytes, 1)} /
+                  {formatBytes(data.system.memory.total_bytes, 1)}
+                </span>
+              </div>
+              <ProgressBar
+                percent={ramPercent}
+                label=""
+                color={ramPercent > 85 ? 'bg-destructive' : ramPercent > 70 ? 'bg-amber-500' : 'bg-primary'}
+              />
             </div>
-            <div className={cn('mt-0.5 font-mono text-xs font-semibold', tempColor)}>
-              {data.system.temperature_celsius !== null
-                ? `${data.system.temperature_celsius.toFixed(1)}°`
-                : '--'}
-            </div>
-          </div>
-          <div className="rounded border p-1.5">
-            <div className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
-              <Activity className="h-2.5 w-2.5" />
-              Proc
-            </div>
-            <div className="mt-0.5 font-mono text-xs font-semibold">
-              {data.system.process_count}
-            </div>
-          </div>
-          <div className="rounded border p-1.5">
-            <div className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
-              <Box className="h-2.5 w-2.5" />
-              Docker
-            </div>
-            <div className="mt-0.5 font-mono text-xs font-semibold">
-              {containerSummary.running}/{containerSummary.total}
-            </div>
-          </div>
-          <div className="rounded border p-1.5">
-            <div className="flex items-center justify-center text-[10px] text-muted-foreground">
-              Uptime
-            </div>
-            <div className="mt-0.5 font-mono text-xs font-semibold">
-              {formatUptime(data.system.uptime_seconds)}
-            </div>
-          </div>
-        </div>
 
-        {/* --- CONTENEDORES DOCKER (compacto) --- */}
-        {containerSummary.total > 0 && (
-          <div>
-            <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+            {/* KPIs de la sub-columna 1 (Temp, Proc, Docker, Uptime).
+                Al vivir en 1/3 de la tarjeta, un 2x2 lee mejor que 4 en fila. */}
+            <div className="grid grid-cols-2 gap-1.5 text-center">
+              <div className="rounded border p-1.5">
+                <div className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
+                  <Thermometer className="h-2.5 w-2.5" />
+                  Temp
+                </div>
+                <div className={cn('mt-0.5 font-mono text-xs font-semibold', tempColor)}>
+                  {data.system.temperature_celsius !== null
+                    ? `${data.system.temperature_celsius.toFixed(1)}°`
+                    : '--'}
+                </div>
+              </div>
+              <div className="rounded border p-1.5">
+                <div className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
+                  <Activity className="h-2.5 w-2.5" />
+                  Proc
+                </div>
+                <div className="mt-0.5 font-mono text-xs font-semibold">
+                  {data.system.process_count}
+                </div>
+              </div>
+              <div className="rounded border p-1.5">
+                <div className="flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
+                  <Box className="h-2.5 w-2.5" />
+                  Docker
+                </div>
+                <div className="mt-0.5 font-mono text-xs font-semibold">
+                  {containerSummary.running}/{containerSummary.total}
+                </div>
+              </div>
+              <div className="rounded border p-1.5">
+                <div className="flex items-center justify-center text-[10px] text-muted-foreground">
+                  Uptime
+                </div>
+                <div className="mt-0.5 font-mono text-xs font-semibold">
+                  {formatUptime(data.system.uptime_seconds)}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ----------------------------------------------------------
+              SUB-COLUMNA 2: CONTENEDORES DOCKER (lista compacta)
+             ---------------------------------------------------------- */}
+          <section>
+            <div className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <Box className="h-3 w-3" /> Contenedores
             </div>
-            <ul className="space-y-1">
-              {data.containers.slice(0, 4).map((container) => {
-                // Color del indicador de salud: semaforo para healthy/unhealthy.
-                const healthColor =
-                  container.health === 'healthy'
-                    ? 'bg-emerald-500'
-                    : container.health === 'unhealthy'
-                      ? 'bg-red-500'
-                      : container.status === 'running'
-                        ? 'bg-amber-500'
-                        : 'bg-gray-400'
-                return (
-                  <li key={container.id} className="flex items-center gap-2 text-xs">
-                    <span className={cn('h-2 w-2 shrink-0 rounded-full', healthColor)} />
-                    <span className="flex-1 truncate font-medium">{container.name}</span>
-                    <span className="w-10 text-right font-mono text-muted-foreground">
-                      {container.cpu_percent.toFixed(1)}%
-                    </span>
-                    <span className="w-16 text-right font-mono text-muted-foreground">
-                      {container.bound_ports
-                        .map((p) => p.host_port)
-                        .slice(0, 2)
-                        .join(', ')}
-                    </span>
+            {containerSummary.total > 0 ? (
+              <ul className="space-y-1">
+                {data.containers.slice(0, 4).map((container) => {
+                  // Color del indicador de salud: semaforo para healthy/unhealthy.
+                  const healthColor =
+                    container.health === 'healthy'
+                      ? 'bg-emerald-500'
+                      : container.health === 'unhealthy'
+                        ? 'bg-red-500'
+                        : container.status === 'running'
+                          ? 'bg-amber-500'
+                          : 'bg-gray-400'
+                  return (
+                    <li key={container.id} className="flex items-center gap-2 text-xs">
+                      <span className={cn('h-2 w-2 shrink-0 rounded-full', healthColor)} />
+                      <span className="flex-1 truncate font-medium">{container.name}</span>
+                      <span className="w-10 text-right font-mono text-muted-foreground">
+                        {container.cpu_percent.toFixed(1)}%
+                      </span>
+                      <span className="w-16 text-right font-mono text-muted-foreground">
+                        {container.bound_ports
+                          .map((p) => p.host_port)
+                          .slice(0, 2)
+                          .join(', ')}
+                      </span>
+                    </li>
+                  )
+                })}
+                {containerSummary.total > 4 && (
+                  <li className="pl-4 text-[11px] text-muted-foreground">
+                    +{containerSummary.total - 4} mas
                   </li>
-                )
-              })}
-              {containerSummary.total > 4 && (
-                <li className="pl-4 text-[11px] text-muted-foreground">
-                  +{containerSummary.total - 4} mas
-                </li>
-              )}
-            </ul>
-          </div>
-        )}
+                )}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">Sin contenedores.</p>
+            )}
+          </section>
 
-        {/* --- TUNNELS DE RED --- */}
-        {activeTunnels.length > 0 && (
-          <div>
-            <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+          {/* ----------------------------------------------------------
+              SUB-COLUMNA 3: TUNELES + ACCIONES RAPIDAS
+             ----------------------------------------------------------
+             `flex flex-col` + `mt-auto` en el bloque de botones: como la
+             celda se estira a la altura de las hermanas (stretch), los
+             botones quedan anclados al FONDO de la columna, alineados
+             con el pie del widget. */}
+          <section className="flex flex-col gap-3">
+            <div className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <Globe className="h-3 w-3" /> Tuneles
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {activeTunnels.map((tunnel) => (
-                <Badge
-                  key={tunnel.name}
-                  variant={tunnel.status === 'connected' ? 'success' : 'destructive'}
-                  className="text-[10px]"
+            {activeTunnels.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {activeTunnels.map((tunnel) => (
+                  <Badge
+                    key={tunnel.name}
+                    variant={tunnel.status === 'connected' ? 'success' : 'destructive'}
+                    className="text-[10px]"
+                  >
+                    {tunnel.name}: {tunnel.status}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Sin tuneles activos.</p>
+            )}
+
+            {/* Acciones rapidas: navegacion interna + app externa. */}
+            <div className="mt-auto flex flex-wrap gap-2 pt-2">
+              <Button size="sm" onClick={handleOpenFullView}>
+                Ver dashboard completo
+                <ArrowUpRight className="h-4 w-4" />
+              </Button>
+              {homeLabAppUrl && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.open(homeLabAppUrl, '_blank', 'noopener')}
                 >
-                  {tunnel.name}: {tunnel.status}
-                </Badge>
-              ))}
+                  App HomeLab
+                </Button>
+              )}
             </div>
-          </div>
-        )}
+          </section>
+        </div>
       </CardContent>
-
-      <CardFooter className="justify-between gap-2 border-t pt-4">
-        {/* Navegacion "fluida" hacia la vista completa del modulo. */}
-        <Button size="sm" onClick={handleOpenFullView}>
-          Ver dashboard completo
-          <ArrowUpRight className="h-4 w-4" />
-        </Button>
-
-        {/* Enlace externo al microservicio Astro, solo si hay URL. */}
-        {homeLabAppUrl && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => window.open(homeLabAppUrl, '_blank', 'noopener')}
-          >
-            App HomeLab
-          </Button>
-        )}
-      </CardFooter>
     </Card>
   )
 }

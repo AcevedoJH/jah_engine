@@ -47,29 +47,66 @@ export function DashboardPage() {
         </p>
       </header>
 
-      {/* Rejilla responsive: 1 columna en movil, 2 en pantallas medianas. */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* Modulo 1: widget en vivo de HomeLab Monitor. */}
-        <HomeLabMonitorWidget />
+      {/* ============================================================
+          REJILLA PRINCIPAL DEL DASHBOARD (CSS Grid)
+         ============================================================
+         ¿Por que CSS Grid y no flexbox? Porque queremos COLOCAR los
+         widgets en una cuadricula de filas/columnas con tramos que
+         ocupan celdas distintas (el hero abarca 2, los demas 1), y Grid
+         expresa eso de forma declarativa con `col-span-*`.
 
-        <div className="space-y-6">
-          {/* Modulo 2: widget interactivo de benchmarks.
+         Decisiones clave de esta rejilla:
+
+         1) `grid-cols-1 lg:grid-cols-2` (RESPONSIVE):
+            - En movil/tablet hay UNA sola columna: todo se apila y cada
+              widget ocupa el ancho completo (maxima legibilidad).
+            - Desde `lg` (>=1024px) hay DOS columnas simetricas.
+            No hace falta media query CSS: Tailwind aplica la clase del
+            breakpoint correspondiente segun el ancho del viewport.
+
+         2) `items-start` (ALINEACION DE ITEMS - el arreglo del bug):
+            Por defecto, CSS Grid aplica `align-items: stretch`, que
+            ESTIRA todos los items de una misma fila para igualar sus
+            alturas. Eso es lo que provocaba el "estiramiento vertical":
+            las tarjetas bajas (Benchmark/Backups) se deformaban y
+            aparecian huecos internos enormes. Con `items-start` cada
+            item toma su ALTURA NATURAL (content-based) y la fila deja
+            de forzar simetrias de altura. La simetria que buscamos es
+            de COLUMNAS (mismo ancho), no de alturas.
+
+         3) `gap-6`: separacion uniforme entre celdas, tanto en filas
+            como en columnas, sin margenes manuales en cada widget.
+
+         4) `lg:col-span-2` en el hero: le dice a HomeLab Monitor que
+            abarque las DOS columnas (formato ancho/panoramico). Los
+            otros dos widgets caen solos en la fila inferior, uno por
+            columna, en una cuadricula simetrica. */}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        {/* HERO (fila superior): HomeLab Monitor a ancho completo. */}
+        <div className="lg:col-span-2">
+          <HomeLabMonitorWidget />
+        </div>
+
+        {/* FILA INFERIOR: dos columnas simetricas.
+            - Modulo 2 (izquierda): widget interactivo de benchmarks.
               Props que recibe:
                 - isRunning / result: desde el contexto global.
                 - totalRequests: del config activo (no vive en `result`);
                   necesario para el % de la barra de progreso.
                 - onNavigateToBenchmark: callback que React Router
-                  traduce a navigate('/benchmark'). */}
+                  traduce a navigate('/benchmark').
+            - Modulo 3 (derecha): widget AUTONOMO de backups; baja sus
+              KPIs del servicio y enlaza a /backups por si mismo. */}
+        <div>
           <BenchmarkWidget
             isRunning={isRunning}
             result={result}
             totalRequests={config.totalRequests}
             onNavigateToBenchmark={() => navigate('/benchmark')}
           />
+        </div>
 
-          {/* Modulo 3: widget AUTONOMO de backups. No necesita props:
-              baja sus KPIs del servicio y enlaza a /backups por si
-              mismo. La rejilla responsive es la misma para los tres. */}
+        <div>
           <StorageBackupsWidget />
         </div>
       </div>
