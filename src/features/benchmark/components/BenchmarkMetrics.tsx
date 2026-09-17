@@ -29,31 +29,7 @@ import { cn } from '@/utils/cn'
 import { formatNumber } from '@/utils/format'
 import type { LatencyPercentiles } from '../types/benchmark'
 import { getLatencyColorClass } from '../utils/latency'
-
-/* =====================================================================
-   ====================== HELPERS DE FORMATO ===========================
-   ===================================================================== */
-
-/**
- * Calcula el porcentaje de progreso de la prueba, acotado a [0, 100].
- *
- * ¿Por qué la fórmula? El progreso es la parte (completadas) sobre el
- * total (solicitadas). Multiplicar por 100 convierte la fracción en un
- * porcentaje entre 0 y 1. Usamos Math.round para que la barra no
- * muestre decimales "feos" (ej. 45.333...%), y clamp con Math.min/Math.max
- * por robustez: si por un bug el motor reportara más completadas que el
- * total, la barra no se desbordaría.
- *
- * @param completedRequests - Peticiones que ya respondieron.
- * @param totalRequests     - Peticiones solicitadas en total.
- * @returns Porcentaje entero entre 0 y 100.
- */
-function calculateProgress(completedRequests: number, totalRequests: number): number {
-  // Protección contra división por cero (total 0 sería NaN).
-  if (totalRequests <= 0) return 0
-  const raw = (completedRequests / totalRequests) * 100
-  return Math.min(100, Math.max(0, Math.round(raw)))
-}
+import { calculateProgress } from '../utils/progress'
 
 /* =====================================================================
    ============================ PROPS ==================================

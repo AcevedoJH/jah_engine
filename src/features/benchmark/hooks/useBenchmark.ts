@@ -10,16 +10,18 @@
  * 1. SEPARACIÓN DE PREOCUPACIONES: el componente solo pinta JSX.
  *    El hook decide QUÉ hacer con el progreso, cuándo limpiar el
  *    estado o cómo reiniciar una prueba.
- * 2. REUTILIZACIÓN: la misma página, futuros widgets o un diálogo
- *    de "lanzar prueba" pueden usar este mismo hook sin duplicar
- *    la lógica de suscripción al progreso.
- * 3. CICLO DE VIDA GARANTIZADO: en el desmontaje del componente
- *    cancelamos la simulación en curso (evita fugas de memoria y
- *    "state updates on unmounted component").
+ * 2. REUTILIZACIÓN Y ESTADO GLOBAL: este hook lo consume
+ *    <BenchmarkProvider> (ver context/BenchmarkContext.tsx), que lo
+ *    monta UNA sola vez en la raíz. Así la misma instancia alimenta a
+ *    la página /benchmark y al gadget del Dashboard: ambos leen el
+ *    MISMO resultado conforme llegan los ticks del motor.
+ * 3. CICLO DE VIDA GARANTIZADO: al desmontarse el provider (solo con
+ *    la propia app) cancelamos la simulación en curso, evitando fugas
+ *    de memoria y "state updates on unmounted component".
  *
  * FLUJO DE DATOS:
  *   usuario -> startTest(config) -> benchmarkService.runSimulatedBenchmark
- *              -> onProgress(progress) -> setResult(progress) -> UI
+ *              -> onProgress(progress) -> setResult(progress) -> Contexto -> UI
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -158,8 +160,8 @@ export function useBenchmark(): UseBenchmarkResult {
 
   // --- Efecto de ciclo de vida ---
   useEffect(() => {
-    // Marcamos el componente como montado. En el cleanup (desmontaje
-    // o re-render que re-ejecute el efecto) cancelamos la simulación
+    // Marcamos el hook como montado. En el cleanup (solo al desmontarse
+    // el provider, es decir, con la propia app) cancelamos la simulación
     // y desmarcamos. Así el onProgress del servicio no actualiza un
     // estado de un componente que ya no existe.
     mountedRef.current = true

@@ -15,10 +15,11 @@
  * Ambas acciones cambian la URL a /benchmark, y React Router hace dos
  * cosas en cadena:
  *     1. Desmonta DashboardPage (la vista HomeLab) y monta BenchmarkPage.
- *     2. Como el modulo se desmonta/remonta, useBenchmark inicia su
- *        "limpieza" (cancelar simulacion) y su estado se reinicia.
- * De ahí que el hook viva DENTRO de esta pagina: encapsula el ciclo
- * de vida completo de la prueba junto al componente que la muestra.
+ *     2. El estado NO se pierde: desde el refactor del widget global,
+ *        `useBenchmark` vive en <BenchmarkProvider> (raiz de la app) y
+ *        aqui lo consume via useBenchmarkContext(). Por eso una prueba
+ *        iniciada en esta pagina sigue viva si navegas al Dashboard:
+ *        su gadget la muestra en tiempo real en el cuadro de mando.
  *
  * PALETA DE COLOR: como el resto del proyecto, esta pagina usa los
  * DESIGN TOKENS de Shadcn (bg-card, border, text-foreground,
@@ -32,7 +33,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BenchmarkChart } from '@/features/benchmark/components/BenchmarkChart'
 import { BenchmarkForm } from '@/features/benchmark/components/BenchmarkForm'
 import { BenchmarkMetrics } from '@/features/benchmark/components/BenchmarkMetrics'
-import { useBenchmark } from '@/features/benchmark/hooks/useBenchmark'
+import { useBenchmarkContext } from '@/features/benchmark/context/BenchmarkContext'
 import { formatClockTimeFromNow } from '@/utils/format'
 import type { BenchmarkRuntimeStatus } from '@/features/benchmark/types/benchmark'
 
@@ -59,15 +60,16 @@ const STATUS_STYLES: Record<BenchmarkRuntimeStatus, string> = {
 
 /** Vista completa del motor de benchmarking (formulario + estado). */
 export function BenchmarkPage() {
-  // Instanciamos el hook UNA vez por pagina. Sus estados y funciones
-  // se cablean directamente a los props del formulario:
+  // Consumimos el ESTADO GLOBAL del benchmark desde el Context (provisto
+  // por <BenchmarkProvider> en la raiz). Sus estados y funciones se
+  // cablean directamente a los props del formulario:
   //   - onSubmit -> startTest(config): el formulario entrega la config
   //     validada y el hook la delega al servicio de simulacion.
   //   - isRunning-> isRunning: el formulario deshabilita inputs y
   //     cambia el boton a "Detener" cuando la prueba corre.
   //   - onCancel -> stopTest(): el formulario detiene la prueba activa.
   // Tambien consumimos `result` para pintar el avance en tiempo real.
-  const { config, result, isRunning, startTest, stopTest } = useBenchmark()
+  const { config, result, isRunning, startTest, stopTest } = useBenchmarkContext()
 
   /**
    * Timestamp de `result` es un reloj HH:mm:ss sin fecha, asi que lo
