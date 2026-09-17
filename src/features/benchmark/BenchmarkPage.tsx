@@ -30,8 +30,9 @@
 import { Gauge, PlayCircle, Square } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BenchmarkForm } from '@/features/benchmark/components/BenchmarkForm'
+import { BenchmarkMetrics } from '@/features/benchmark/components/BenchmarkMetrics'
 import { useBenchmark } from '@/features/benchmark/hooks/useBenchmark'
-import { formatClockTimeFromNow, formatNumber } from '@/utils/format'
+import { formatClockTimeFromNow } from '@/utils/format'
 import type { BenchmarkRuntimeStatus } from '@/features/benchmark/types/benchmark'
 
 /** Mapa estado -> texto legible para la UI. */
@@ -110,60 +111,22 @@ export function BenchmarkPage() {
       {/* ============================================================
           RESUMEN DEL RESULTADO (tiempo real)
          ============================================================
-         Mientras el motor emite progreso, aqui se refleja el estado
-         acumulado: contadores y percentiles. Es la primera ventana de
-         datos del modulo; en un paso posterior las graficas Recharts
-         sustituiran/ampliaran esta tabla.
-         Las celdillas usan tokens del tema (border, bg-muted) para
-         que combinen con las tarjetas del resto del dashboard. */}
+         Delegamos TODA la presentación de métricas al componente
+         BenchmarkMetrics, que es "puro": recibe el resultado por
+         props y no conoce el motor. Aquí solo mantiene la tarjeta
+         contenedora y la nota de la última actualización. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Resultado acumulado</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Tres contadores principales de la prueba. */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-md border bg-muted p-3">
-              <p className="text-xs text-muted-foreground">Completadas</p>
-              <p className="mt-1 text-xl font-semibold text-foreground">
-                {formatNumber(result.completedRequests)}
-              </p>
-            </div>
-            <div className="rounded-md border bg-muted p-3">
-              <p className="text-xs text-muted-foreground">Exitosas (2xx/3xx)</p>
-              <p className="mt-1 text-xl font-semibold text-emerald-500">
-                {formatNumber(result.successfulRequests)}
-              </p>
-            </div>
-            <div className="rounded-md border bg-muted p-3">
-              <p className="text-xs text-muted-foreground">Fallidas (4xx/5xx/timeout)</p>
-              <p className="mt-1 text-xl font-semibold text-rose-500">
-                {formatNumber(result.failedRequests)}
-              </p>
-            </div>
-          </div>
-
-          {/* Percentiles de latencia: el corazon estadistico del modulo. */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {(
-              [
-                ['p50', result.percentiles.p50],
-                ['p90', result.percentiles.p90],
-                ['p95', result.percentiles.p95],
-                ['p99', result.percentiles.p99],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label} className="rounded-md border bg-muted p-3">
-                <p className="text-xs text-muted-foreground">Percentil {label}</p>
-                <p className="mt-1 text-xl font-semibold text-foreground">
-                  {formatNumber(value)} <span className="text-xs text-muted-foreground">ms</span>
-                </p>
-              </div>
-            ))}
-          </div>
+        <CardContent>
+          {/* El componente hijo recibe el resultado emitido por cada
+              tick y el total solicitado (necesario para el % de
+              progreso). Solo se re-renderiza cuando estos cambian. */}
+          <BenchmarkMetrics result={result} totalRequests={config.totalRequests} />
 
           {/* Pie informativo: config activa + ultimo tick recibido. */}
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-4 text-xs text-muted-foreground">
             Config activa: <span className="text-foreground">{config.method}</span> ·{' '}
             <span className="text-foreground">{config.targetUrl}</span> · Concurrencia{' '}
             <span className="text-foreground">{config.concurrency}</span> · Último tick{' '}
