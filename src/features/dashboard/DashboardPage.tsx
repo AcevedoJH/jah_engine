@@ -8,16 +8,22 @@
  *   - Modulo 2: widget INTERACTIVO de Benchmark & Profiling, que lee
  *     del ESTADO GLOBAL (BenchmarkContext) para conmutar entre reposo
  *     y cuadro de mando en tiempo real.
- *   - Modulo 3: tarjeta resumen que enlaza a su pagina completa.
+ *   - Modulo 3: widget AUTONOMO de Storage & Remote Backups, que baja
+ *     sus metricas el mismo desde backupService (mock/API) y enlaza
+ *     a su pagina completa.
+ *
+ * ¿Cual es el papel de esta pagina en la composicion del dashboard?
+ * La pagina solo COMPONE (wire): monta cada widget en la rejilla y,
+ * cuando hacen falta, les cablea props y callbacks de navegacion.
+ * Quien decide "de donde salen los datos" es cada widget (o el
+ * contexto global, como en el benchmark), NO esta pagina.
  */
 
 import { useNavigate } from 'react-router-dom'
-import { DatabaseBackup } from 'lucide-react'
 import { HomeLabMonitorWidget } from '@/components/widgets/HomeLabMonitorWidget'
 import { BenchmarkWidget } from '@/components/widgets/BenchmarkWidget'
+import { StorageBackupsWidget } from '@/features/dashboard/components/StorageBackupsWidget'
 import { useBenchmarkContext } from '@/features/benchmark/context/BenchmarkContext'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 
 /** Pagina principal que agrupa los widgets del dashboard. */
 export function DashboardPage() {
@@ -61,22 +67,10 @@ export function DashboardPage() {
             onNavigateToBenchmark={() => navigate('/benchmark')}
           />
 
-          {/* Modulo 3: acceso a los backups cifrados. */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <DatabaseBackup className="h-5 w-5 text-primary" /> Storage &amp; Remote Backups
-              </CardTitle>
-              <CardDescription>
-                Copias cifradas en origen con AES-256 y sincronización remota vía Rclone / S3.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" onClick={() => navigate('/backups')}>
-                Ir a Backups
-              </Button>
-            </CardContent>
-          </Card>
+          {/* Modulo 3: widget AUTONOMO de backups. No necesita props:
+              baja sus KPIs del servicio y enlaza a /backups por si
+              mismo. La rejilla responsive es la misma para los tres. */}
+          <StorageBackupsWidget />
         </div>
       </div>
     </section>
