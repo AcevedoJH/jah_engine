@@ -34,17 +34,20 @@ export const LATENCY_CAUTION_MAX_MS = 400
  * en el bundle (por eso NO se pueden construir dinámicamente).
  *
  * Resultado del cálculo:
- *   - < 100 ms           -> 'text-emerald-400' (rendimiento óptimo).
+ *   - < 100 ms           -> 'text-emerald-500' (rendimiento óptimo).
  *   - 100 <= x < 400 ms  -> 'text-amber-400'  (aceptable / precaución).
  *   - >= 400 ms          -> 'text-rose-500'   (cuello de botella).
  *
  * @param latencyMs - Latencia en milisegundos.
- * @returns Clase de color de texto, ej. 'text-emerald-400'.
+ * @returns Clase de color de texto, ej. 'text-emerald-500'.
  */
 export function getLatencyColorClass(latencyMs: number): string {
   // Verde: rendimiento óptimo (la inmensa mayoría de respuestas).
+  // Usamos text-emerald-500 para que coincida exactamente con el color
+  // de la tarjeta "Exitosas (2xx/3xx)", logrando un semáforo coherente
+  // en todo el componente de métricas.
   if (latencyMs < LATENCY_OPTIMAL_MAX_MS) {
-    return 'text-emerald-400'
+    return 'text-emerald-500'
   }
   // Ámbar: rendimiento aceptable pero con margen de mejora (precaución).
   if (latencyMs < LATENCY_CAUTION_MAX_MS) {
