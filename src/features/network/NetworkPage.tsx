@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { BackToDashboardButton } from '@/components/layout/BackToDashboardButton'
 import { useHomeLabWidget } from '@/hooks/useHomeLabWidget'
 import type { HostStatus } from '@/types'
 import { formatLatency, formatPercent, formatUptime } from '@/utils/format'
@@ -92,6 +93,11 @@ export function NetworkPage() {
           </ul>
         </CardContent>
       </Card>
+
+      {/* Boton compartido de retorno (ancho completo en movil, discreto
+          en escritorio). Visita BackToDashboardButton.tsx para el
+          patron movil vs escritorio. */}
+      <BackToDashboardButton />
     </section>
   )
 }

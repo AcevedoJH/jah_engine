@@ -14,6 +14,7 @@
 
 import { DatabaseBackup } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BackToDashboardButton } from '@/components/layout/BackToDashboardButton'
 
 /** Vista del orquestador de backups cifrados (aun sin logica). */
 export function BackupsPage() {
@@ -37,6 +38,9 @@ export function BackupsPage() {
           (AES-256) y su sincronización remota mediante Rclone/S3.
         </CardContent>
       </Card>
+
+      {/* Boton compartido de retorno. */}
+      <BackToDashboardButton />
     </section>
   )
 }
