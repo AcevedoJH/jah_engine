@@ -28,7 +28,8 @@
  * claro y oscuro.
  */
 
-import { Gauge, PlayCircle, Square, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, Gauge, PlayCircle, Square, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BenchmarkChart } from '@/features/benchmark/components/BenchmarkChart'
@@ -73,6 +74,12 @@ export function BenchmarkPage() {
   // `resetTest` (del contexto global) es la accion "Limpiar Resultados":
   // cancela la simulacion si la hubiera y vuelve el estado a 'idle'.
   const { config, result, isRunning, startTest, stopTest, resetTest } = useBenchmarkContext()
+
+  // Navegacion programatica de React Router. Se usa para el enlace de
+  // retorno al Dashboard al final de la pagina (especialmente util en
+  // movil, donde la sidebar esta oculta y el "camino de vuelta" no
+  // esta tan a mano como en escritorio).
+  const navigate = useNavigate()
 
   /**
    * Timestamp de `result` es un reloj HH:mm:ss sin fecha, asi que lo
@@ -190,6 +197,33 @@ export function BenchmarkPage() {
           ? `Simulación en marcha contra ${config.targetUrl} (${config.concurrency} peticiones concurrentes).`
           : `La simulación está detenida. Configura los parámetros y pulsa "Iniciar Benchmark".`}
       </div>
+
+      {/* ============================================================
+          VOLVER AL DASHBOARD (navegacion de retorno)
+         ============================================================
+         Boton al final de la pagina para regresar al inicio de la app.
+         ¿Por que hace falta si ya existe la sidebar?
+           - MOVIL: la sidebar esta oculta (hidden md:flex), asi que
+             este control es el "boton de volver" equivalente al de
+             una app nativa (zona inferior = pulgar).
+           - ESCRITORIO: tras varias tarjetas/granes pantallas de scroll
+             (el main hace scroll independiente), el usuario llega al
+             final sin el menu a la vista; el boton ahorra el scroll
+             hacia arriba o el viaje a la sidebar.
+         Navegamos con navigate('/') porque la ruta index de React
+         Router es el Dashboard. Usamos variant="outline" (tokens del
+         tema: border-border + hover:bg-muted) en lugar del ejemplo
+         fijo `border-slate-700` de la spec, por la regla del proyecto
+         de NO usar colores fijos slate-*. En movil el boton ocupa el
+         ancho completo (blanco de pulgar generoso). */}
+      <Button
+        variant="outline"
+        onClick={() => navigate('/')}
+        className="w-full sm:w-auto"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Volver al Dashboard
+      </Button>
     </section>
   )
 }
