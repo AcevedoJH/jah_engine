@@ -129,6 +129,35 @@ export interface BenchmarkDataPoint {
 export type BenchmarkRuntimeStatus = 'idle' | 'running' | 'completed' | 'failed'
 
 /**
+ * Resumen AGREGADO de la prueba, pensado para el resultado final y el
+ * historial. Mientras `percentiles` describe la DISTRIBUCIÓN de latencia,
+ * aquí concentramos una mirada de un vistazo (los "titulares" de la
+ * prueba) lista para mostrar en una línea compacta o guardar en el
+ * historial.
+ *
+ * @param targetUrl        - URL objetivo que recibió la carga.
+ * @param method           - Método HTTP usado en la prueba.
+ * @param concurrency      - Peticiones simultáneas configuradas.
+ * @param ttfbMs           - Latencia media de "Time To First Byte" (la
+ *                           demora hasta la primera parte de la
+ *                           respuesta; calculada como ~35-65% de la
+ *                           latencia total en el mock).
+ * @param avgLatencyMs     - Latencia media total de las peticiones.
+ * @param requestsPerSecond- Throughput promedio (peticiones completadas
+ *                           entre el tiempo total de la prueba).
+ * @param successRate      - Porcentaje de peticiones exitosas (0-100).
+ */
+export interface BenchmarkSummary {
+  readonly targetUrl: string
+  readonly method: BenchmarkHttpMethod
+  readonly concurrency: number
+  readonly ttfbMs: number
+  readonly avgLatencyMs: number
+  readonly requestsPerSecond: number
+  readonly successRate: number
+}
+
+/**
  * Resultado ACUMULADO de la prueba. El Mock Engine reconstruye y
  * emite un nuevo objeto de este tipo en cada tick (cada 500 ms) a
  * través del callback de progreso.
@@ -139,6 +168,9 @@ export type BenchmarkRuntimeStatus = 'idle' | 'running' | 'completed' | 'failed'
  * @param failedRequests     - Peticiones con error 4xx/5xx o timeout.
  * @param percentiles        - Métricas de latencia sobre TODAS las
  *                             peticiones completadas hasta el momento.
+ * @param summary            - Resumen agregado: lo consumen la página y
+ *                             el historial para mostrar "titulares".
+ *                             Durante 'running' va con ceros parciales.
  * @param timeSeries         - Historial de puntos para la gráfica en
  *                             tiempo real (acotado a lo reciente).
  */
@@ -148,7 +180,30 @@ export interface BenchmarkResult {
   readonly successfulRequests: number
   readonly failedRequests: number
   readonly percentiles: LatencyPercentiles
+  readonly summary: BenchmarkSummary
   readonly timeSeries: BenchmarkDataPoint[]
+}
+
+/* =====================================================================
+   ============================ HISTORIAL ==============================
+   ===================================================================== */
+
+/**
+ * Entrada del historial de pruebas. La capa de servicio la devuelve
+ * a través de `getBenchmarkHistory()`; en modo mock proviene de
+ * `mockBenchmarkHistory.ts` y en modo real del backend
+ * (GET /benchmark/history).
+ *
+ * @param id         - Identificador único de la prueba.
+ * @param finishedAt - Fecha ISO 8601 en que terminó la prueba.
+ * @param config     - Configuración con la que se lanzó.
+ * @param summary    - Resumen agregado de los resultados.
+ */
+export interface BenchmarkHistoryItem {
+  readonly id: string
+  readonly finishedAt: string
+  readonly config: BenchmarkConfig
+  readonly summary: BenchmarkSummary
 }
 
 /* =====================================================================
@@ -175,6 +230,15 @@ export function createIdleBenchmarkResult(): BenchmarkResult {
       p90: 0,
       p95: 0,
       p99: 0,
+    },
+    summary: {
+      targetUrl: '',
+      method: 'GET',
+      concurrency: 0,
+      ttfbMs: 0,
+      avgLatencyMs: 0,
+      requestsPerSecond: 0,
+      successRate: 0,
     },
     timeSeries: [],
   }
